@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Song Sorter</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="app">
+        <h1>Get ready to clean up your music with Song Sorter</h1>
+        <p>Log in to Spotify to manage your liked songs.</p>
+
+        <!-- Login Button (visible when not authenticated) -->
+        <button id="login-button" class="login-btn" style="display: none;">Log in with Spotify</button>
+
+        <!-- Displaying Songs Section (visible when user is authenticated) -->
+        <div id="song-container" style="display: none;">
+            <h2>Your Liked Songs</h2>
+            <div id="songs-list"></div> <!-- Songs will be dynamically added here -->
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
