@@ -1,58 +1,46 @@
-// This file handles user interactions, including login, fetching liked songs, and liking songs.
-
 // Wait for the DOM to be fully loaded
 document.addEventListener('DOMContentLoaded', () => {
-    // The login button (for user to log in)
+    // References to DOM elements
     const loginButton = document.getElementById('login-button');
     const songContainer = document.getElementById('song-container');
 
-    // Check if the user is logged in by checking for an access token (could be passed via a session or cookie)
+    // Retrieve the access token from localStorage
     let accessToken = localStorage.getItem('accessToken');
 
-    // If not logged in, show the login button
-    if (!accessToken) {
-        loginButton.style.display = 'block';
-        songContainer.style.display = 'none'; // Hide songs section
+    // Detect access token in the URL after redirection
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('access_token')) {
+        accessToken = params.get('access_token');
+        localStorage.setItem('accessToken', accessToken); // Save token for future use
+        console.log('Access token saved:', accessToken);
+
+        // Clear the query string from the URL
+        window.history.replaceState({}, document.title, '/');
+    }
+
+    // Show/hide elements based on login state
+    if (accessToken) {
+        loginButton.style.display = 'none'; // Hide login button
+        fetchLikedSongs(accessToken); // Fetch liked songs
     } else {
-        loginButton.style.display = 'none'; // Hide login button after user is authenticated
-        fetchLikedSongs(accessToken); // Fetch liked songs if the user is logged in
+        loginButton.style.display = 'block'; // Show login button
+        songContainer.style.display = 'none'; // Hide songs section
     }
 
     // Login button click handler
-    document.getElementById('login-button').addEventListener('click', () => {
-        event.preventDefault(); // Prevents default form submit or page reload
-        window.location.href = '/login'; // Redirects to the /login route on the backend
+    loginButton.addEventListener('click', (event) => {
+        event.preventDefault(); // Prevent default action
+        window.location.href = '/login'; // Redirect to Spotify login
     });
 
-
-    // Detect the access token in the url after the redirect
-    document.addEventListener('DOMContentLoaded', () => {
-        const params = new URLSearchParams(window.location.search);
-        const accessToken = params.get('access_token');
-
-        if (accessToken) {
-            console.log('Authenticated with token:', accessToken);
-            document.querySelector('#login-button').style.display = 'none'; // Hide login button
-            document.querySelector('#song-container').style.display = 'block'; // Show songs section
-
-            // Fetch and display liked songs here using the accessToken
-        } else {
-            document.querySelector('#login-button').style.display = 'block'; // Show login button
-            document.querySelector('#song-container').style.display = 'none'; // Hide songs section
-        }
-    });
-
-
-
-    // Function to fetch liked songs from the backend API
+    // Function to fetch liked songs from the backend
     async function fetchLikedSongs(token) {
         try {
-            // Make a request to the backend to get liked songs using the access token
             const response = await fetch('/api/liked-songs', {
                 method: 'GET',
                 headers: {
-                    'Authorization': `Bearer ${token}`
-                }
+                    Authorization: `Bearer ${token}`,
+                },
             });
 
             if (!response.ok) {
@@ -66,11 +54,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Function to display the list of liked songs on the page
+    // Function to display the list of liked songs
     function displaySongs(songs) {
         songContainer.innerHTML = ''; // Clear any previous songs
 
-        songs.forEach(song => {
+        songs.forEach((song) => {
             const songElement = document.createElement('div');
             songElement.classList.add('song');
 
@@ -78,7 +66,9 @@ document.addEventListener('DOMContentLoaded', () => {
             songTitle.textContent = song.track.name;
 
             const artist = document.createElement('p');
-            artist.textContent = song.track.artists.map(artist => artist.name).join(', ');
+            artist.textContent = song.track.artists
+                .map((artist) => artist.name)
+                .join(', ');
 
             const songImage = document.createElement('img');
             songImage.src = song.track.album.images[1].url;
@@ -105,7 +95,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Function to like a song
     async function likeSong(trackId) {
         try {
-            // Make a request to like a song by passing its track ID to the backend API
             const response = await fetch(`/api/like-song/${trackId}`, {
                 method: 'POST',
             });
