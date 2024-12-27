@@ -27,6 +27,7 @@ app.get('/login', (req, res) => {
         redirect_uri: redirectUri,
         scope: 'user-library-read user-library-modify', // Permissions to read and modify liked songs
     })}`;
+    console.log("Redirecting to Spotify auth URL:", authUrl); // Debugging log
     res.redirect(authUrl);
 });
 
@@ -48,8 +49,9 @@ app.get('/callback', async (req, res) => {
                 },
             }
         );
-        accessToken = response.data.access_token; // Get and store the access token
-        res.redirect('/'); // Redirect to the main app after successful authentication
+        const accessToken = response.data.access_token;
+        // Redirect user back to the frontend with access_token in the query
+        res.redirect(`/?access_token=${accessToken}`);
     } catch (error) {
         console.error('Error exchanging code for access token:', error.message);
         res.send('Authentication failed.');

@@ -19,9 +19,30 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Login button click handler
-    loginButton.addEventListener('click', () => {
-        window.location.href = '/login'; // Redirect to Spotify login
+    document.getElementById('login-button').addEventListener('click', () => {
+        event.preventDefault(); // Prevents default form submit or page reload
+        window.location.href = '/login'; // Redirects to the /login route on the backend
     });
+
+
+    // Detect the access token in the url after the redirect
+    document.addEventListener('DOMContentLoaded', () => {
+        const params = new URLSearchParams(window.location.search);
+        const accessToken = params.get('access_token');
+
+        if (accessToken) {
+            console.log('Authenticated with token:', accessToken);
+            document.querySelector('#login-button').style.display = 'none'; // Hide login button
+            document.querySelector('#song-container').style.display = 'block'; // Show songs section
+
+            // Fetch and display liked songs here using the accessToken
+        } else {
+            document.querySelector('#login-button').style.display = 'block'; // Show login button
+            document.querySelector('#song-container').style.display = 'none'; // Hide songs section
+        }
+    });
+
+
 
     // Function to fetch liked songs from the backend API
     async function fetchLikedSongs(token) {
