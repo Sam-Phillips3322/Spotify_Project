@@ -11,8 +11,11 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@react-spring/web": "^9.7.5",
+    "@use-gesture/react": "^10.3.1",
     "axios": "^1.7.9",
     "dotenv": "^16.4.7",
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "react-use-gesture": "^9.1.3"
   }
 }

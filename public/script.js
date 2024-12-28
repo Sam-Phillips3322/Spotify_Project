@@ -27,7 +27,7 @@ const UIManager = {
     elements: {
         loginButton: null,
         songContainer: null,
-        loadingSpinner: null
+        loadingSpinner: null,
         welcomeContent: null
     },
 
