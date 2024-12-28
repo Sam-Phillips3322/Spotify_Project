@@ -10,16 +10,22 @@
 
 <body>
     <div class="app">
-        <h1>Get ready to clean up your music with Song Sorter</h1>
-        <p>Log in to Spotify to manage your liked songs.</p>
+        <!-- Welcome content (will be hidden after login) -->
+        <div id="welcome-content">
+            <h1>Get ready to clean up your music with Song Sorter</h1>
+            <p>Log in to Spotify to manage your liked songs.</p>
+        </div>
 
         <!-- Login Button (visible when not authenticated) -->
         <button id="login-button" class="login-btn" style="display: none;">Log in with Spotify</button>
 
+        <!-- Loading Spinner (hidden by default) -->
+        <div id="loading-spinner" class="hidden"></div>
+
         <!-- Displaying Songs Section (visible when user is authenticated) -->
         <div id="song-container" style="display: none;">
             <h2>Your Liked Songs</h2>
-            <div id="songs-list"></div> <!-- Songs will be dynamically added here -->
+            <div id="songs-list"></div>
         </div>
     </div>
 

@@ -20,22 +20,48 @@ body {
 
 .login-btn:hover {
     background-color: #1ed760;
-    /* Hover effect with brighter green */
     color: #000000;
-    /* Black text on hover */
+}
+
+/* Loading Spinner */
+#loading-spinner {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 50px;
+    height: 50px;
+    border: 5px solid #191414;
+    border-top: 5px solid #1ed760;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    z-index: 1000;
+}
+
+@keyframes spin {
+    0% {
+        transform: translate(-50%, -50%) rotate(0deg);
+    }
+
+    100% {
+        transform: translate(-50%, -50%) rotate(360deg);
+    }
+}
+
+/* Hide spinner when not loading */
+#loading-spinner.hidden {
+    display: none;
 }
 
 /* General app container */
 .app h1 {
     color: #ffffff;
-    /* Ensure the title is white */
     font-size: 2rem;
     margin-top: 50px;
 }
 
 .app p {
     color: #f1f1f1;
-    /* Slightly lighter shade for the paragraph text */
     font-size: 1.2rem;
     margin: 20px 0;
 }
