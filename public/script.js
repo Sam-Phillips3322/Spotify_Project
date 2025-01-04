@@ -22,6 +22,20 @@ const AuthState = {
     }
 };
 
+// 401 error handling 
+async function handleApiError(error) {
+    if (error.message.includes('401')) {
+        AuthState.clearAuth();
+        UIManager.updateUIState(false);
+        alert('Session expired. Please log in again.');
+        window.location.href = '/login';
+    } else {
+        alert('An error occurred. Please try again later.');
+    }
+}
+
+
+
 // UI State management
 const UIManager = {
     elements: {
@@ -58,7 +72,7 @@ const UIManager = {
     }
 };
 
-// next card loading logic
+// Next card loading logic
 let currentSongIndex = 0;
 let allSongs = [];
 
@@ -106,7 +120,7 @@ const SpotifyAPI = {
             console.error('Error liking song:', error);
             throw error;
         }
-    }
+    },
 };
 
 // Song renderer
@@ -211,12 +225,11 @@ function initializeSwipe(element) {
     function loadNextCard() {
         currentSongIndex++;
         if (currentSongIndex < allSongs.length) {
-            const newCard = SongRenderer.renderSong(allSongs[currentSongIndex]);
-            newCard.style.zIndex = 1; // Ensure it appears on top of the stack
+            const newCard = card.renderSong(allSongs[currentSongIndex]);
+            newCard.style.zIndex = 1;
             document.getElementById('card-stack').appendChild(newCard);
-            initializeSwipe(newCard); // Initialize swipe functionality on the new card
+            initializeSwipe(newCard);
         } else {
-            // Handle when no more cards are available
             console.log('No more songs to show.');
             const cardStack = document.getElementById('card-stack');
             if (cardStack) {
@@ -228,7 +241,6 @@ function initializeSwipe(element) {
 
 }
 
-// Then modify your SongRenderer.renderSong method to initialize swipe on each card:
 const SongRenderer = {
     renderSong(song) {
         const card = document.createElement('div');
@@ -243,7 +255,6 @@ const SongRenderer = {
             </div>
         `;
 
-        // Initialize swipe on the card
         initializeSwipe(card);
 
         return card;
@@ -253,11 +264,9 @@ const SongRenderer = {
 
 // Main app initialization
 document.addEventListener('DOMContentLoaded', async () => {
-    // Initialize state managers
     const auth = AuthState.init();
     const ui = UIManager.init();
 
-    // Check for access token in URL
     const params = new URLSearchParams(window.location.search);
     if (params.has('access_token')) {
         const newToken = params.get('access_token');
@@ -265,10 +274,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.history.replaceState({}, document.title, '/');
     }
 
-    // Update UI based on authentication state
     ui.updateUIState(auth.isAuthenticated);
 
-    // Setup event listeners
     ui.elements.loginButton.addEventListener('click', (event) => {
         event.preventDefault();
         window.location.href = '/login';
@@ -294,12 +301,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             function loadNextCard() {
                 currentSongIndex++;
                 if (currentSongIndex < allSongs.length) {
-                    const newCard = SongRenderer.renderSong(allSongs[currentSongIndex]);
-                    newCard.style.zIndex = 1; // Ensure it appears on top of the stack
+                    const newCard = card.renderSong(allSongs[currentSongIndex]);
+                    newCard.style.zIndex = 1;
                     document.getElementById('card-stack').appendChild(newCard);
-                    initializeSwipe(newCard); // Initialize swipe functionality on the new card
+                    initializeSwipe(newCard);
                 } else {
-                    // Handle when no more cards are available
                     console.log('No more songs to show.');
                     const cardStack = document.getElementById('card-stack');
                     if (cardStack) {
