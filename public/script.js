@@ -58,6 +58,11 @@ const UIManager = {
     }
 };
 
+// next card loading logic
+let currentSongIndex = 0;
+let allSongs = [];
+
+
 // API Service
 const SpotifyAPI = {
     async fetchLikedSongs(token) {
@@ -105,31 +110,146 @@ const SpotifyAPI = {
 };
 
 // Song renderer
-const SongRenderer = {
+const card = {
     renderSong(song) {
-        const songElement = document.createElement('div');
-        songElement.classList.add('song');
+        const card = document.createElement('div');
+        card.classList.add('song');
+        card.dataset.trackId = song.track.id;
 
-        songElement.innerHTML = `
-            <img src="${song.track.album.images[1].url}" alt="${song.track.name} album cover" class="song-image">
+        card.innerHTML = `
+            <img src="${song.track.album.images[0].url}" alt="${song.track.name} album cover" class="song-image">
             <div class="song-info">
                 <h3 class="song-title">${song.track.name}</h3>
                 <p class="song-artist">${song.track.artists.map(artist => artist.name).join(', ')}</p>
-                <button class="like-button" data-track-id="${song.track.id}">Like</button>
             </div>
         `;
 
-        return songElement;
+        return card;
     },
 
+
     renderSongList(songs, container) {
-        container.innerHTML = '';
-        songs.forEach(song => {
-            const songElement = this.renderSong(song);
-            container.appendChild(songElement);
+        songs.slice(0, 5).forEach((song, index) => {
+            const card = this.renderSong(song);
+            card.style.zIndex = songs.length - index;
+            container.appendChild(card);
         });
     }
+
 };
+
+
+// Swipe handling functions
+function initializeSwipe(element) {
+    let startX;
+    let currentX;
+
+    element.addEventListener('mousedown', startSwipe);
+    element.addEventListener('touchstart', startSwipe);
+
+    function startSwipe(e) {
+        startX = e.type === 'mousedown' ? e.clientX : e.touches[0].clientX;
+        document.addEventListener('mousemove', swipeMove);
+        document.addEventListener('touchmove', swipeMove);
+        document.addEventListener('mouseup', swipeEnd);
+        document.addEventListener('touchend', swipeEnd);
+    }
+
+    function swipeMove(e) {
+        currentX = e.type === 'mousemove' ? e.clientX : e.touches[0].clientX;
+        const deltaX = currentX - startX;
+        element.style.transform = `translateX(${deltaX}px) rotate(${deltaX * 0.1}deg)`;
+    }
+
+    function swipeEnd() {
+        const deltaX = currentX - startX;
+        if (Math.abs(deltaX) > 100) {
+            // Swipe threshold met
+            if (deltaX > 0) {
+                handleRightSwipe(element);
+            } else {
+                handleLeftSwipe(element);
+            }
+        } else {
+            // Reset card position
+            element.style.transform = '';
+        }
+
+        cleanup();
+    }
+
+    function cleanup() {
+        document.removeEventListener('mousemove', swipeMove);
+        document.removeEventListener('touchmove', swipeMove);
+        document.removeEventListener('mouseup', swipeEnd);
+        document.removeEventListener('touchend', swipeEnd);
+    }
+
+    async function handleLeftSwipe(card) {
+        const trackId = card.dataset.trackId;
+        try {
+            await SpotifyAPI.removeFromLiked(trackId, AuthState.accessToken);
+            removeCard(card);
+        } catch (error) {
+            console.error('Failed to remove song:', error);
+            card.style.transform = ''; // Reset position
+        }
+    }
+
+    function handleRightSwipe(card) {
+        removeCard(card); // Simply remove card and show next
+    }
+
+    function removeCard(card) {
+        card.style.transform = 'translateX(100vw)';
+        setTimeout(() => {
+            card.remove();
+            loadNextCard(); // Load the next card dynamically
+        }, 300);
+    }
+
+    function loadNextCard() {
+        currentSongIndex++;
+        if (currentSongIndex < allSongs.length) {
+            const newCard = SongRenderer.renderSong(allSongs[currentSongIndex]);
+            newCard.style.zIndex = 1; // Ensure it appears on top of the stack
+            document.getElementById('card-stack').appendChild(newCard);
+            initializeSwipe(newCard); // Initialize swipe functionality on the new card
+        } else {
+            // Handle when no more cards are available
+            console.log('No more songs to show.');
+            const cardStack = document.getElementById('card-stack');
+            if (cardStack) {
+                cardStack.innerHTML = '<p>No more songs available!</p>';
+            }
+        }
+    }
+
+
+}
+
+// Then modify your SongRenderer.renderSong method to initialize swipe on each card:
+const SongRenderer = {
+    renderSong(song) {
+        const card = document.createElement('div');
+        card.classList.add('song-card');
+        card.dataset.trackId = song.track.id;
+
+        card.innerHTML = `
+            <img src="${song.track.album.images[0].url}" alt="${song.track.name}">
+            <div class="song-info">
+                <h3>${song.track.name}</h3>
+                <p>${song.track.artists.map(artist => artist.name).join(', ')}</p>
+            </div>
+        `;
+
+        // Initialize swipe on the card
+        initializeSwipe(card);
+
+        return card;
+    },
+};
+
 
 // Main app initialization
 document.addEventListener('DOMContentLoaded', async () => {
@@ -171,8 +291,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (auth.isAuthenticated) {
         try {
             ui.showLoading();
-            const songs = await SpotifyAPI.fetchLikedSongs(auth.accessToken);
-            SongRenderer.renderSongList(songs, ui.elements.songContainer);
+            function loadNextCard() {
+                currentSongIndex++;
+                if (currentSongIndex < allSongs.length) {
+                    const newCard = SongRenderer.renderSong(allSongs[currentSongIndex]);
+                    newCard.style.zIndex = 1; // Ensure it appears on top of the stack
+                    document.getElementById('card-stack').appendChild(newCard);
+                    initializeSwipe(newCard); // Initialize swipe functionality on the new card
+                } else {
+                    // Handle when no more cards are available
+                    console.log('No more songs to show.');
+                    const cardStack = document.getElementById('card-stack');
+                    if (cardStack) {
+                        cardStack.innerHTML = '<p>No more songs available!</p>';
+                    }
+                }
+            }
+
         } catch (error) {
             if (error.message.includes('401')) {
                 auth.clearAuth();

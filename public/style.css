@@ -76,18 +76,19 @@ body {
 }
 
 /* Individual swipeable card */
-.card {
-    width: 300px;
-    height: 400px;
-    padding: 20px;
+.song-card {
+    width: 80%;
+    height: 80%;
     border-radius: 10px;
     color: white;
     display: flex;
+    cursor: grab;
     justify-content: flex-end;
     flex-direction: column;
     box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
     background-color: #333;
     position: absolute;
+    transition: transform 0.2s;
 }
 
 .card h3 {
@@ -99,6 +100,18 @@ body {
     margin: 0;
     font-size: 1rem;
     opacity: 0.8;
+}
+
+.song-card img {
+    width: 100%;
+    height: 60%;
+    object-fit: cover;
+    border-radius: 10px 10px 0 0;
+}
+
+.song-card .song-info {
+    padding: 15px;
+    color: white;
 }
 
 /* Swipe feedback */

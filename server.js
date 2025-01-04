@@ -90,8 +90,35 @@ const SpotifyService = {
                 headers: { Authorization: `Bearer ${accessToken}` }
             }
         );
+    },
+
+    async removeFromLiked(trackId, token) {
+        try {
+            // Make the API call to remove a song from liked
+            const response = await axios.delete(`/api/like-song/${trackId}`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            // Return the response data (it's already in JSON format)
+            return response.data;
+        } catch (error) {
+            // Log the error for debugging
+            if (error.response) {
+                console.error('Error removing liked song:', error.response.data);
+            } else {
+                console.error('Error removing liked song:', error.message);
+            }
+
+            // Rethrow the error to be handled further up the call stack
+            throw error;
+        }
     }
-};
+
+}
+
 
 // Routes
 app.get('/login', (req, res) => {
@@ -100,33 +127,61 @@ app.get('/login', (req, res) => {
     res.redirect(authUrl);
 });
 
-app.get('/callback', asyncHandler(async (req, res) => {
-    const { code, error } = req.query;
+app.get('/callback', async (req, res) => {
+    const code = req.query.code;
 
-    if (error) {
-        throw new Error(`Authorization error: ${error}`);
+    try {
+        const response = await axios.post(
+            'https://accounts.spotify.com/api/token',
+            querystring.stringify({
+                grant_type: 'authorization_code',
+                code: code,
+                redirect_uri: redirectUri,
+            }),
+            {
+                headers: {
+                    Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+            }
+        );
+
+        // Log the token for debugging
+        console.log('Token received:', response.data.access_token);
+
+        const accessToken = response.data.access_token;
+        res.redirect(`/?access_token=${accessToken}`);
+    } catch (error) {
+        console.error('Error in callback:', error.response?.data || error.message);
+        res.status(500).send('Authentication failed');
     }
+});
 
-    if (!code) {
-        throw new Error('No authorization code provided');
+app.get('/api/liked-songs', async (req, res) => {
+    try {
+        // Get token from request header
+        const authHeader = req.headers.authorization;
+        if (!authHeader) {
+            return res.status(401).json({ error: 'No authorization header' });
+        }
+
+        const token = authHeader.split(' ')[1]; // Extract token from "Bearer <token>"
+
+        const response = await axios.get('https://api.spotify.com/v1/me/tracks', {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        res.json(response.data);
+    } catch (error) {
+        console.error('Error fetching liked songs:', error.message);
+        res.status(error.response?.status || 500).json({
+            error: 'Failed to fetch liked songs',
+            details: error.message
+        });
     }
-
-    const data = await SpotifyService.getAccessToken(code);
-    res.redirect(`/?access_token=${data.access_token}`);
-}));
-
-app.get('/api/liked-songs', asyncHandler(async (req, res) => {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-        res.status(401).json({ error: 'No authorization header' });
-        return;
-    }
-
-    const token = authHeader.split(' ')[1];
-    const { limit, offset } = req.query;
-    const songs = await SpotifyService.getLikedSongs(token, limit, offset);
-    res.json(songs);
-}));
+});
 
 app.post('/api/like-song/:id', asyncHandler(async (req, res) => {
     const authHeader = req.headers.authorization;
@@ -141,6 +196,20 @@ app.post('/api/like-song/:id', asyncHandler(async (req, res) => {
     await SpotifyService.likeSong(token, trackId);
     res.json({ message: 'Song liked successfully' });
 }));
+
+app.post('/remove-liked-song/:trackId', async (req, res) => {
+    const trackId = req.params.trackId;
+    const token = req.headers.authorization.split(' ')[1]; // Get the token from the header
+
+    try {
+        const result = await SpotifyService.removeFromLiked(trackId, token);
+        res.json(result); // Send the result back as response
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to remove liked song', details: error.message });
+    }
+});
+
+
 
 // Health check endpoint
 app.get('/health', (req, res) => {
