@@ -42,16 +42,19 @@ app.use((err, req, res, next) => {
 // Spotify API service
 const SpotifyService = {
     getAuthUrl() {
-        return `${SPOTIFY_CONFIG.authUrl}?${querystring.stringify({
+        const authUrl = `${SPOTIFY_CONFIG.authUrl}?${querystring.stringify({
             client_id: SPOTIFY_CONFIG.clientId,
             response_type: 'code',
             redirect_uri: SPOTIFY_CONFIG.redirectUri,
             scope: 'user-library-read user-library-modify',
             show_dialog: true
         })}`;
+        console.log('Generated Spotify auth Url:', authUrl);
+        return authUrl;
     },
 
     async getAccessToken(code) {
+        console.log('Requesting access token with authorization code...');
         const response = await axios.post(
             SPOTIFY_CONFIG.tokenUrl,
             querystring.stringify({
@@ -68,10 +71,12 @@ const SpotifyService = {
                 },
             }
         );
+        console.log('Access token response:', response.data);
         return response.data;
     },
 
     async getNewAccessToken(refreshToken) {
+        console.log('Refreshing access token...');
         const response = await axios.post(
             SPOTIFY_CONFIG.tokenUrl,
             querystring.stringify({
@@ -87,11 +92,13 @@ const SpotifyService = {
                 },
             }
         );
+        console.log('New access token:', response.data.access_token);
         return response.data.access_token;
     },
 
 
     async getLikedSongs(accessToken, limit = 20, offset = 0) {
+        console.log('Fetching liked songs from Spotify...');
         const response = await axios.get(
             `${SPOTIFY_CONFIG.apiUrl}/me/tracks`,
             {
@@ -99,10 +106,12 @@ const SpotifyService = {
                 params: { limit, offset }
             }
         );
+        console.log('Fetched liked songs:', response.data);
         return response.data;
     },
 
     async likeSong(accessToken, trackId) {
+        console.log('Liking song:', trackId);
         await axios.put(
             `${SPOTIFY_CONFIG.apiUrl}/me/tracks`,
             { ids: [trackId] },
@@ -110,10 +119,12 @@ const SpotifyService = {
                 headers: { Authorization: `Bearer ${accessToken}` }
             }
         );
+        console.log('Song liked successfully:', trackId);
     },
 
     async removeFromLiked(trackId, token) {
         try {
+            console.log('Removing liked song:', trackId);
             const response = await axios.delete(
                 `${SPOTIFY_CONFIG.apiUrl}/me/tracks`,
                 {
@@ -121,7 +132,7 @@ const SpotifyService = {
                     data: { ids: [trackId] },
                 }
             );
-
+            console.log('Song removed successfully:', trackId);
             return response.data;
         } catch (error) {
             if (error.response) {
@@ -148,25 +159,10 @@ app.get('/callback', async (req, res) => {
     const code = req.query.code;
 
     try {
-        const response = await axios.post(
-            'https://accounts.spotify.com/api/token',
-            querystring.stringify({
-                grant_type: 'authorization_code',
-                code: code,
-                redirect_uri: redirectUri,
-            }),
-            {
-                headers: {
-                    Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-            }
-        );
-
-        console.log('Token received:', response.data.access_token);
-
-        const accessToken = response.data.access_token;
-        res.redirect(`/?access_token=${accessToken}`);
+        console.log('Handling Spotify callback...');
+        const tokenData = await SpotifyService.getAccessToken(code);
+        console.log('Token received:', tokenData.access_token);
+        res.redirect(`/?access_token=${tokenData.access_token}`);
     } catch (error) {
         console.error('Error in callback:', error.response?.data || error.message);
         res.status(500).send('Authentication failed');
@@ -175,20 +171,16 @@ app.get('/callback', async (req, res) => {
 
 app.get('/api/liked-songs', async (req, res) => {
     try {
+        console.log('Handling request to fetch liked songs...');
         const authHeader = req.headers.authorization;
         if (!authHeader) {
+            console.warn('No authorization header provided.');
             return res.status(401).json({ error: 'No authorization header' });
         }
 
         const token = authHeader.split(' ')[1];
-
-        const response = await axios.get('https://api.spotify.com/v1/me/tracks', {
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
-        });
-
-        res.json(response.data);
+        const songs = await SpotifyService.getLikedSongs(token);
+        res.json(songs);
     } catch (error) {
         console.error('Error fetching liked songs:', error.message);
 
@@ -204,22 +196,25 @@ app.get('/api/liked-songs', async (req, res) => {
 });
 
 app.post('/api/like-song/:id', asyncHandler(async (req, res) => {
+    console.log('Handling request to like a song...');
     const authHeader = req.headers.authorization;
     if (!authHeader) {
+        console.warn('No authorization header provided.');
         res.status(401).json({ error: 'No authorization header' });
         return;
     }
 
     const token = authHeader.split(' ')[1];
     const trackId = req.params.id;
-
     await SpotifyService.likeSong(token, trackId);
     res.json({ message: 'Song liked successfully' });
 }));
 
 app.delete('/remove-liked-song/:trackId', asyncHandler(async (req, res) => {
+    console.log('Handling request to remove a liked song...');
     const authHeader = req.headers.authorization;
     if (!authHeader) {
+        console.warn('No authorization header provided.');
         return res.status(401).json({ error: 'No authorization header provided' });
     }
 
@@ -234,6 +229,7 @@ app.delete('/remove-liked-song/:trackId', asyncHandler(async (req, res) => {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
+    console.log('Health check endpoint hit.');
     res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 

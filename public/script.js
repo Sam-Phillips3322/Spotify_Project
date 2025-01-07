@@ -1,21 +1,27 @@
-// State management for authentication
 const AuthState = {
     isAuthenticated: false,
     accessToken: null,
 
     init() {
+        console.log('Initializing AuthState...');
         this.accessToken = localStorage.getItem('accessToken');
         this.isAuthenticated = !!this.accessToken;
+        console.log('AuthState initialized:', {
+            accessToken: this.accessToken,
+            isAuthenticated: this.isAuthenticated,
+        });
         return this;
     },
 
     setAuth(token) {
+        console.log('Setting authentication token:', token);
         this.accessToken = token;
         this.isAuthenticated = true;
         localStorage.setItem('accessToken', token);
     },
 
     clearAuth() {
+        console.log('Clearing authentication...');
         this.accessToken = null;
         this.isAuthenticated = false;
         localStorage.removeItem('accessToken');
@@ -24,7 +30,9 @@ const AuthState = {
 
 // 401 error handling 
 async function handleApiError(error) {
+    console.error('API Error encountered:', error);
     if (error.message.includes('401')) {
+        console.log('401 Unauthorized error detected. Clearing AuthState...');
         AuthState.clearAuth();
         UIManager.updateUIState(false);
         alert('Session expired. Please log in again.');
@@ -46,26 +54,31 @@ const UIManager = {
     },
 
     init() {
+        console.log('Initializing UIManager...');
         this.elements.loginButton = document.getElementById('login-button');
         this.elements.songContainer = document.getElementById('song-container');
         this.elements.loadingSpinner = document.getElementById('loading-spinner');
         this.elements.welcomeContent = document.getElementById('welcome-content');
+        console.log('UIManager elements initialized:', this.elements);
         return this;
     },
 
     updateUIState(isAuthenticated) {
+        console.log('Updating UI state. isAuthenticated:', isAuthenticated);
         this.elements.loginButton.style.display = isAuthenticated ? 'none' : 'block';
         this.elements.songContainer.style.display = isAuthenticated ? 'block' : 'none';
         this.elements.welcomeContent.style.display = isAuthenticated ? 'none' : 'block';
     },
 
     showLoading() {
+        console.log('Showing loading spinner...');
         if (this.elements.loadingSpinner) {
             this.elements.loadingSpinner.style.display = 'block';
         }
     },
 
     hideLoading() {
+        console.log('Hiding loading spinner...');
         if (this.elements.loadingSpinner) {
             this.elements.loadingSpinner.style.display = 'none';
         }
@@ -73,13 +86,14 @@ const UIManager = {
 };
 
 // Next card loading logic
-let currentSongIndex = 0;
-let allSongs = [];
+// let currentSongIndex = 0;
+// let allSongs = [];
 
 
 // API Service
 const SpotifyAPI = {
     async fetchLikedSongs(token) {
+        console.log('Fetching liked songs with token:', token);
         try {
             const response = await fetch('/api/liked-songs', {
                 method: 'GET',
@@ -88,12 +102,15 @@ const SpotifyAPI = {
                     'Content-Type': 'application/json'
                 }
             });
+            console.log('Making request to /api/liked-songs with token:', accessToken);
+
 
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
             const data = await response.json();
+            console.log('Fetched liked songs:', data);
             return data.items;
         } catch (error) {
             console.error('Error fetching liked songs:', error);
@@ -102,6 +119,7 @@ const SpotifyAPI = {
     },
 
     async likeSong(trackId, token) {
+        console.log('Liking song with trackId:', trackId);
         try {
             const response = await fetch(`/api/like-song/${trackId}`, {
                 method: 'POST',
@@ -111,11 +129,13 @@ const SpotifyAPI = {
                 }
             });
 
+            console.log('Response received from /api/like-song:', response);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-
-            return await response.json();
+            const result = await response.json();
+            console.log('Song liked successfully:', result);
+            return result;
         } catch (error) {
             console.error('Error liking song:', error);
             throw error;
@@ -155,6 +175,7 @@ const card = {
 
 // Swipe handling functions
 function initializeSwipe(element) {
+    console.log('Initializing swipe for element:', element);
     let startX;
     let currentX;
 
@@ -162,6 +183,7 @@ function initializeSwipe(element) {
     element.addEventListener('touchstart', startSwipe);
 
     function startSwipe(e) {
+        console.log('Swipe started');
         startX = e.type === 'mousedown' ? e.clientX : e.touches[0].clientX;
         document.addEventListener('mousemove', swipeMove);
         document.addEventListener('touchmove', swipeMove);
@@ -172,20 +194,23 @@ function initializeSwipe(element) {
     function swipeMove(e) {
         currentX = e.type === 'mousemove' ? e.clientX : e.touches[0].clientX;
         const deltaX = currentX - startX;
+        console.log('Swipe move. DeltaX:', deltaX);
         element.style.transform = `translateX(${deltaX}px) rotate(${deltaX * 0.1}deg)`;
     }
 
     function swipeEnd() {
+        console.log('Swipe ended');
         const deltaX = currentX - startX;
         if (Math.abs(deltaX) > 100) {
-            // Swipe threshold met
             if (deltaX > 0) {
+                console.log('Right swipe detected');
                 handleRightSwipe(element);
             } else {
+                console.log('Left swipe detected');
                 handleLeftSwipe(element);
             }
         } else {
-            // Reset card position
+            console.log('Swipe below threshold. Resetting position.');
             element.style.transform = '';
         }
 
@@ -193,6 +218,7 @@ function initializeSwipe(element) {
     }
 
     function cleanup() {
+        console.log('Cleaning up swipe listeners...');
         document.removeEventListener('mousemove', swipeMove);
         document.removeEventListener('touchmove', swipeMove);
         document.removeEventListener('mouseup', swipeEnd);
@@ -200,29 +226,34 @@ function initializeSwipe(element) {
     }
 
     async function handleLeftSwipe(card) {
+        console.log('Handling left swipe for card:', card);
         const trackId = card.dataset.trackId;
         try {
             await SpotifyAPI.removeFromLiked(trackId, AuthState.accessToken);
             removeCard(card);
         } catch (error) {
             console.error('Failed to remove song:', error);
-            card.style.transform = ''; // Reset position
+            card.style.transform = '';
         }
     }
 
     function handleRightSwipe(card) {
-        removeCard(card); // Simply remove card and show next
+        console.log('Handling right swipe for card:', card);
+        removeCard(card);
     }
 
     function removeCard(card) {
+        console.log('Removing card:', card);
         card.style.transform = 'translateX(100vw)';
         setTimeout(() => {
             card.remove();
-            loadNextCard(); // Load the next card dynamically
+            console.log('Card removed. Loading next card...');
+            loadNextCard();
         }, 300);
     }
 
     function loadNextCard() {
+        console.log('Loading next card...');
         currentSongIndex++;
         if (currentSongIndex < allSongs.length) {
             const newCard = card.renderSong(allSongs[currentSongIndex]);
@@ -264,16 +295,19 @@ const SongRenderer = {
 
 // Main app initialization
 document.addEventListener('DOMContentLoaded', async () => {
+    console.log('DOM fully loaded and parsed.');
     const auth = AuthState.init();
     const ui = UIManager.init();
 
     const params = new URLSearchParams(window.location.search);
     if (params.has('access_token')) {
         const newToken = params.get('access_token');
+        console.log('Access token found in URL. Setting auth token...');
         auth.setAuth(newToken);
         window.history.replaceState({}, document.title, '/');
     }
 
+    console.log('Updating UI state...');
     ui.updateUIState(auth.isAuthenticated);
 
     ui.elements.loginButton.addEventListener('click', (event) => {
