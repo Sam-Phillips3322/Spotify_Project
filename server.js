@@ -3,6 +3,11 @@ const axios = require('axios');
 const querystring = require('querystring');
 const dotenv = require('dotenv');
 const path = require('path');
+const cors = require('cors');
+
+
+
+
 
 // Middleware for handling async errors
 const asyncHandler = fn => (req, res, next) => {
@@ -13,6 +18,8 @@ const asyncHandler = fn => (req, res, next) => {
 dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+console.log("Backend console messages here")
 
 // Spotify API configuration
 const SPOTIFY_CONFIG = {
@@ -27,6 +34,13 @@ const SPOTIFY_CONFIG = {
 // Middleware
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
+
+// Connecting front and backend allowances
+app.use(cors({
+    origin: 'http://localhost:3000', // Replace with your frontend's URL
+    methods: ['GET', 'POST', 'DELETE'], // Allow specific HTTP methods
+    allowedHeaders: ['Authorization', 'Content-Type'] // Allow specific headers
+}));
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -170,9 +184,11 @@ app.get('/callback', async (req, res) => {
 });
 
 app.get('/api/liked-songs', async (req, res) => {
+    console.log('Handling request to fetch liked songs...');
     try {
-        console.log('Handling request to fetch liked songs...');
+
         const authHeader = req.headers.authorization;
+        console.log("Auth header received:", authHeader);
         if (!authHeader) {
             console.warn('No authorization header provided.');
             return res.status(401).json({ error: 'No authorization header' });

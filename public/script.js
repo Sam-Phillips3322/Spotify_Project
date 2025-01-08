@@ -1,3 +1,73 @@
+
+// Main app initialization
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log('DOM fully loaded and parsed.');
+    const auth = AuthState.init();
+    const ui = UIManager.init();
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('access_token')) {
+        const newToken = params.get('access_token');
+        console.log('Access token found in URL. Setting auth token...');
+        auth.setAuth(newToken);
+        window.history.replaceState({}, document.title, '/');
+    }
+
+    console.log('Updating UI state...');
+    ui.updateUIState(auth.isAuthenticated);
+
+    ui.elements.loginButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        window.location.href = '/login';
+    });
+
+    ui.elements.songContainer.addEventListener('click', async (event) => {
+        if (event.target.classList.contains('like-button')) {
+            const trackId = event.target.dataset.trackId;
+            try {
+                await SpotifyAPI.likeSong(trackId, auth.accessToken);
+                event.target.textContent = 'Liked!';
+                event.target.disabled = true;
+            } catch (error) {
+                alert('Failed to like song. Please try again.');
+            }
+        }
+    });
+
+
+    if (auth.isAuthenticated) {
+        try {
+            ui.showLoading();
+            function loadNextCard() {
+                currentSongIndex++;
+                if (currentSongIndex < allSongs.length) {
+                    const newCard = card.renderSong(allSongs[currentSongIndex]);
+                    newCard.style.zIndex = 1;
+                    document.getElementById('card-stack').appendChild(newCard);
+                    initializeSwipe(newCard);
+                } else {
+                    console.log('No more songs to show.');
+                    const cardStack = document.getElementById('card-stack');
+                    if (cardStack) {
+                        cardStack.innerHTML = '<p>No more songs available!</p>';
+                    }
+                }
+            }
+
+        } catch (error) {
+            if (error.message.includes('401')) {
+                auth.clearAuth();
+                ui.updateUIState(false);
+                alert('Session expired. Please log in again.');
+            } else {
+                alert('Failed to load songs. Please try again.');
+            }
+        } finally {
+            ui.hideLoading();
+        }
+    }
+});
+
 const AuthState = {
     isAuthenticated: false,
     accessToken: null,
@@ -27,22 +97,6 @@ const AuthState = {
         localStorage.removeItem('accessToken');
     }
 };
-
-// 401 error handling 
-async function handleApiError(error) {
-    console.error('API Error encountered:', error);
-    if (error.message.includes('401')) {
-        console.log('401 Unauthorized error detected. Clearing AuthState...');
-        AuthState.clearAuth();
-        UIManager.updateUIState(false);
-        alert('Session expired. Please log in again.');
-        window.location.href = '/login';
-    } else {
-        alert('An error occurred. Please try again later.');
-    }
-}
-
-
 
 // UI State management
 const UIManager = {
@@ -85,17 +139,12 @@ const UIManager = {
     }
 };
 
-// Next card loading logic
-// let currentSongIndex = 0;
-// let allSongs = [];
-
-
 // API Service
 const SpotifyAPI = {
     async fetchLikedSongs(token) {
         console.log('Fetching liked songs with token:', token);
         try {
-            const response = await fetch('/api/liked-songs', {
+            const response = await fetch('https://localhost:3000/api/liked-songs', {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -121,7 +170,7 @@ const SpotifyAPI = {
     async likeSong(trackId, token) {
         console.log('Liking song with trackId:', trackId);
         try {
-            const response = await fetch(`/api/like-song/${trackId}`, {
+            const response = await fetch(`https://localhost:3000/api/like-song/${trackId}`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -170,6 +219,26 @@ const card = {
         });
     }
 
+};
+
+const SongRenderer = {
+    renderSong(song) {
+        const card = document.createElement('div');
+        card.classList.add('song-card');
+        card.dataset.trackId = song.track.id;
+
+        card.innerHTML = `
+            <img src="${song.track.album.images[0].url}" alt="${song.track.name}">
+            <div class="song-info">
+                <h3>${song.track.name}</h3>
+                <p>${song.track.artists.map(artist => artist.name).join(', ')}</p>
+            </div>
+        `;
+
+        initializeSwipe(card);
+
+        return card;
+    },
 };
 
 
@@ -272,92 +341,16 @@ function initializeSwipe(element) {
 
 }
 
-const SongRenderer = {
-    renderSong(song) {
-        const card = document.createElement('div');
-        card.classList.add('song-card');
-        card.dataset.trackId = song.track.id;
-
-        card.innerHTML = `
-            <img src="${song.track.album.images[0].url}" alt="${song.track.name}">
-            <div class="song-info">
-                <h3>${song.track.name}</h3>
-                <p>${song.track.artists.map(artist => artist.name).join(', ')}</p>
-            </div>
-        `;
-
-        initializeSwipe(card);
-
-        return card;
-    },
-};
-
-
-// Main app initialization
-document.addEventListener('DOMContentLoaded', async () => {
-    console.log('DOM fully loaded and parsed.');
-    const auth = AuthState.init();
-    const ui = UIManager.init();
-
-    const params = new URLSearchParams(window.location.search);
-    if (params.has('access_token')) {
-        const newToken = params.get('access_token');
-        console.log('Access token found in URL. Setting auth token...');
-        auth.setAuth(newToken);
-        window.history.replaceState({}, document.title, '/');
-    }
-
-    console.log('Updating UI state...');
-    ui.updateUIState(auth.isAuthenticated);
-
-    ui.elements.loginButton.addEventListener('click', (event) => {
-        event.preventDefault();
+// 401 error handling 
+async function handleApiError(error) {
+    console.error('API Error encountered:', error);
+    if (error.message.includes('401')) {
+        console.log('401 Unauthorized error detected. Clearing AuthState...');
+        AuthState.clearAuth();
+        UIManager.updateUIState(false);
+        alert('Session expired. Please log in again.');
         window.location.href = '/login';
-    });
-
-    ui.elements.songContainer.addEventListener('click', async (event) => {
-        if (event.target.classList.contains('like-button')) {
-            const trackId = event.target.dataset.trackId;
-            try {
-                await SpotifyAPI.likeSong(trackId, auth.accessToken);
-                event.target.textContent = 'Liked!';
-                event.target.disabled = true;
-            } catch (error) {
-                alert('Failed to like song. Please try again.');
-            }
-        }
-    });
-
-    // Fetch and display songs if authenticated
-    if (auth.isAuthenticated) {
-        try {
-            ui.showLoading();
-            function loadNextCard() {
-                currentSongIndex++;
-                if (currentSongIndex < allSongs.length) {
-                    const newCard = card.renderSong(allSongs[currentSongIndex]);
-                    newCard.style.zIndex = 1;
-                    document.getElementById('card-stack').appendChild(newCard);
-                    initializeSwipe(newCard);
-                } else {
-                    console.log('No more songs to show.');
-                    const cardStack = document.getElementById('card-stack');
-                    if (cardStack) {
-                        cardStack.innerHTML = '<p>No more songs available!</p>';
-                    }
-                }
-            }
-
-        } catch (error) {
-            if (error.message.includes('401')) {
-                auth.clearAuth();
-                ui.updateUIState(false);
-                alert('Session expired. Please log in again.');
-            } else {
-                alert('Failed to load songs. Please try again.');
-            }
-        } finally {
-            ui.hideLoading();
-        }
+    } else {
+        alert('An error occurred. Please try again later.');
     }
-});
+}
