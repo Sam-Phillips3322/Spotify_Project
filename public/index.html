@@ -17,15 +17,17 @@
         </div>
 
         <!-- Login Button (visible when not authenticated) -->
-        <button id="login-button" class="login-btn" style="display: none;">Log in with Spotify</button>
+        <button id="login-button" class="login-btn">Log in with Spotify</button>
 
         <!-- Loading Spinner (hidden by default) -->
-        <div id="loading-spinner" class="hidden"></div>
+        <div id="loading-spinner" class="spinner hidden">
+            <div class="spinner-inner"></div>
+        </div>
 
         <!-- Displaying Songs Section (visible when user is authenticated) -->
-        <div id="song-container" style="display: none;">
-            <div id="card-stack" class="'card-stack"></div>
+        <div id="song-container">
             <h2>Liked Songs</h2>
+            <div id="card-stack" class="card-stack"></div>
             <div id="swipe-feedback" class="swipe-feedback"></div>
         </div>
     </div>
