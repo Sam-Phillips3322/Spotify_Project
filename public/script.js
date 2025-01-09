@@ -143,52 +143,29 @@ const UIManager = {
 const SpotifyAPI = {
     async fetchLikedSongs(token) {
         console.log('Fetching liked songs with token:', token);
-        try {
-            const response = await fetch('https://localhost:3000/api/liked-songs', {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-            console.log('Making request to /api/liked-songs with token:', accessToken);
-
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+        const response = await fetch('/api/liked-songs', {
+            headers: {
+                'Authorization': `Bearer ${token}`,
             }
-
-            const data = await response.json();
-            console.log('Fetched liked songs:', data);
-            return data.items;
-        } catch (error) {
-            console.error('Error fetching liked songs:', error);
-            throw error;
-        }
+        });
+        if (!response.ok) throw new Error('Failed to fetch liked songs');
+        return response.json();
     },
 
-    async likeSong(trackId, token) {
-        console.log('Liking song with trackId:', trackId);
-        try {
-            const response = await fetch(`https://localhost:3000/api/like-song/${trackId}`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
+    async likeSong(accessToken, trackId) {
+        const response = await fetch(`/api/like-song/${trackId}`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!response.ok) throw new Error('Failed to like song');
+    },
 
-            console.log('Response received from /api/like-song:', response);
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            const result = await response.json();
-            console.log('Song liked successfully:', result);
-            return result;
-        } catch (error) {
-            console.error('Error liking song:', error);
-            throw error;
-        }
+    async removeLikedSong(accessToken, trackId) {
+        const response = await fetch(`/api/remove-liked-song/${trackId}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!response.ok) throw new Error('Failed to remove song');
     },
 };
 
@@ -221,26 +198,6 @@ const card = {
 
 };
 
-const SongRenderer = {
-    renderSong(song) {
-        const card = document.createElement('div');
-        card.classList.add('song-card');
-        card.dataset.trackId = song.track.id;
-
-        card.innerHTML = `
-            <img src="${song.track.album.images[0].url}" alt="${song.track.name}">
-            <div class="song-info">
-                <h3>${song.track.name}</h3>
-                <p>${song.track.artists.map(artist => artist.name).join(', ')}</p>
-            </div>
-        `;
-
-        initializeSwipe(card);
-
-        return card;
-    },
-};
-
 
 // Swipe handling functions
 function initializeSwipe(element) {
@@ -248,8 +205,12 @@ function initializeSwipe(element) {
     let startX;
     let currentX;
 
+    // Mouse events for swipe
     element.addEventListener('mousedown', startSwipe);
     element.addEventListener('touchstart', startSwipe);
+
+    // Keyboard events for swipe
+    document.addEventListener('keydown', handleKeyboardSwipe);
 
     function startSwipe(e) {
         console.log('Swipe started');
@@ -264,7 +225,7 @@ function initializeSwipe(element) {
         currentX = e.type === 'mousemove' ? e.clientX : e.touches[0].clientX;
         const deltaX = currentX - startX;
         console.log('Swipe move. DeltaX:', deltaX);
-        element.style.transform = `translateX(${deltaX}px) rotate(${deltaX * 0.1}deg)`;
+        element.style.transform = `translateX(${deltaX}px) rotate(${deltaX * 0.1}deg)`;  // Visual swipe effect
     }
 
     function swipeEnd() {
@@ -273,14 +234,14 @@ function initializeSwipe(element) {
         if (Math.abs(deltaX) > 100) {
             if (deltaX > 0) {
                 console.log('Right swipe detected');
-                handleRightSwipe(element);
+                handleRightSwipe(element);  // Handle right swipe (skip song)
             } else {
                 console.log('Left swipe detected');
-                handleLeftSwipe(element);
+                handleLeftSwipe(element);  // Handle left swipe (remove from liked)
             }
         } else {
             console.log('Swipe below threshold. Resetting position.');
-            element.style.transform = '';
+            element.style.transform = '';  // Reset position if swipe is not significant
         }
 
         cleanup();
@@ -298,26 +259,21 @@ function initializeSwipe(element) {
         console.log('Handling left swipe for card:', card);
         const trackId = card.dataset.trackId;
         try {
-            await SpotifyAPI.removeFromLiked(trackId, AuthState.accessToken);
-            removeCard(card);
+            await SpotifyAPI.removeLikedSong(AuthState.accessToken, trackId);  // API call to remove liked song
+            removeCard(card);  // Remove the card from UI
         } catch (error) {
             console.error('Failed to remove song:', error);
-            card.style.transform = '';
+            card.style.transform = '';  // Reset transformation if error occurs
         }
-    }
-
-    function handleRightSwipe(card) {
-        console.log('Handling right swipe for card:', card);
-        removeCard(card);
     }
 
     function removeCard(card) {
         console.log('Removing card:', card);
         card.style.transform = 'translateX(100vw)';
         setTimeout(() => {
-            card.remove();
+            card.remove();  // Remove the card from DOM
             console.log('Card removed. Loading next card...');
-            loadNextCard();
+            loadNextCard();  // Load the next song in the playlist
         }, 300);
     }
 
@@ -325,21 +281,31 @@ function initializeSwipe(element) {
         console.log('Loading next card...');
         currentSongIndex++;
         if (currentSongIndex < allSongs.length) {
-            const newCard = card.renderSong(allSongs[currentSongIndex]);
+            const newCard = card.renderSong(allSongs[currentSongIndex]);  // Render the next song card
             newCard.style.zIndex = 1;
             document.getElementById('card-stack').appendChild(newCard);
-            initializeSwipe(newCard);
+            initializeSwipe(newCard);  // Initialize swipe for the new card
         } else {
             console.log('No more songs to show.');
             const cardStack = document.getElementById('card-stack');
             if (cardStack) {
-                cardStack.innerHTML = '<p>No more songs available!</p>';
+                cardStack.innerHTML = '<p>No more songs available!</p>';  // Show "No more songs" message
             }
         }
     }
 
-
+    // Keyboard swipe handling
+    function handleKeyboardSwipe(e) {
+        if (e.key === 'ArrowLeft') {
+            console.log('Left arrow key pressed. Simulating left swipe.');
+            handleLeftSwipe(element);
+        } else if (e.key === 'ArrowRight') {
+            console.log('Right arrow key pressed. Simulating right swipe.');
+            handleRightSwipe(element);  // Simulate right swipe (skip song)
+        }
+    }
 }
+
 
 // 401 error handling 
 async function handleApiError(error) {

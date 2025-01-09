@@ -107,7 +107,7 @@ const SpotifyService = {
     },
 
 
-    async getLikedSongs(accessToken, limit = 20, offset = 0) {
+    async fetchLikedSongs(accessToken, limit = 20, offset = 0) {
         console.log('Fetching liked songs from Spotify...');
         const response = await axios.get(
             `${SPOTIFY_CONFIG.apiUrl}/me/tracks`,
@@ -192,7 +192,7 @@ app.get('/api/liked-songs', async (req, res) => {
     console.log('Fetching liked songs with token:', token);
 
     try {
-        const response = await SpotifyService.getLikedSongs(token);
+        const response = await SpotifyService.fetchLikedSongs(token);
         console.log('Fetched liked songs from Spotify API:', response);
         res.json(response);
     } catch (error) {
@@ -209,7 +209,7 @@ app.get('/api/liked-songs', async (req, res) => {
     }
 });
 
-app.post('/api/like-song/:id', asyncHandler(async (req, res) => {
+app.post('/api/like-songs/:id', asyncHandler(async (req, res) => {
     console.log('Handling request to like a song...');
     const authHeader = req.headers.authorization;
     if (!authHeader) {
