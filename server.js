@@ -120,18 +120,6 @@ const SpotifyService = {
         return response.data;
     },
 
-    async likeSong(accessToken, trackId) {
-        console.log('Liking song:', trackId);
-        await axios.put(
-            `${SPOTIFY_CONFIG.apiUrl}/me/tracks`,
-            { ids: [trackId] },
-            {
-                headers: { Authorization: `Bearer ${accessToken}` }
-            }
-        );
-        console.log('Song liked successfully:', trackId);
-    },
-
     async removeFromLiked(trackId, token) {
         try {
             console.log('Removing liked song:', trackId);
@@ -209,22 +197,25 @@ app.get('/api/liked-songs', async (req, res) => {
     }
 });
 
-app.post('/api/like-songs/:id', asyncHandler(async (req, res) => {
-    console.log('Handling request to like a song...');
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-        console.warn('No authorization header provided.');
-        res.status(401).json({ error: 'No authorization header' });
-        return;
+app.post('/api/refresh-token', asyncHandler(async (req, res) => {
+    const { refreshToken } = req.body; // Expect the refresh token in the body
+
+    if (!refreshToken) {
+        return res.status(400).json({ error: 'Refresh token is required' });
     }
 
-    const token = authHeader.split(' ')[1];
-    const trackId = req.params.id;
-    await SpotifyService.likeSong(token, trackId);
-    res.json({ message: 'Song liked successfully' });
+    try {
+        const accessToken = await SpotifyService.getNewAccessToken(refreshToken);
+        res.json({ accessToken });
+    } catch (error) {
+        console.error('Error refreshing token:', error.message);
+        res.status(500).json({ error: 'Failed to refresh token' });
+    }
 }));
 
-app.delete('/remove-liked-song/:trackId', asyncHandler(async (req, res) => {
+
+
+app.delete('/api/remove-liked-song/:trackId', asyncHandler(async (req, res) => {
     console.log('Handling request to remove a liked song...');
     const authHeader = req.headers.authorization;
     if (!authHeader) {

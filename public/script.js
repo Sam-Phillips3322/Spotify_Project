@@ -1,3 +1,4 @@
+// AuthState Management
 const AuthState = {
     isAuthenticated: false,
     accessToken: null,
@@ -20,11 +21,20 @@ const AuthState = {
         localStorage.setItem('accessToken', token);
     },
 
+    setRefreshToken(token) {
+        localStorage.setItem('refreshToken', token);
+    },
+
+    getRefreshToken() {
+        return localStorage.getItem('refreshToken');
+    },
+
     clearAuth() {
         console.log('Clearing authentication...');
         this.accessToken = null;
         this.isAuthenticated = false;
         localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
     }
 };
 
@@ -82,53 +92,262 @@ const SpotifyAPI = {
         return response.json();
     },
 
-    async likeSong(accessToken, trackId) {
-        const response = await fetch(`/api/like-song/${trackId}`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        if (!response.ok) throw new Error('Failed to like song');
-    },
-
     async removeLikedSong(accessToken, trackId) {
         const response = await fetch(`/api/remove-liked-song/${trackId}`, {
             method: 'DELETE',
             headers: { Authorization: `Bearer ${accessToken}` },
         });
         if (!response.ok) throw new Error('Failed to remove song');
-    },
+        return response.json();
+    }
 };
 
-// Song renderer
-const card = {
-    renderSong(song) {
-        const card = document.createElement('div');
-        card.classList.add('song');
-        card.dataset.trackId = song.track.id;
+class SwipeManager {
+    constructor(cardStackElement, allSongs, onEmpty) {
+        this.cardStack = cardStackElement;
+        this.allSongs = allSongs;
+        this.currentIndex = 0;
+        this.onEmpty = onEmpty;
 
-        card.innerHTML = `
-        <img src="${song.track.album.images[0].url}" alt="${song.track.name} album cover" class="song-image">
-        <div class="song-info">
-            <h3 class="song-title">${song.track.name}</h3>
-            <p class="song-artist">${song.track.artists.map(artist => artist.name).join(', ')}</p>
-        </div>
-    `;
+        this.initializeCards();
+        this.setupKeyboardControls();
+    }
 
-        return card;
-    },
+    setupKeyboardControls() {
+        document.addEventListener('keydown', (e) => {
+            const currentCard = this.getCurrentCard();
+            if (!currentCard) return;
 
-
-    renderSongList(songs, container) {
-        songs.slice(0, 5).forEach((song, index) => {
-            const card = this.renderSong(song);
-            card.style.zIndex = songs.length - index;
-            container.appendChild(card);
+            switch (e.key) {
+                case 'ArrowLeft':
+                    e.preventDefault();
+                    this.animateAndHandleSwipe(currentCard, 'left');
+                    break;
+                case 'ArrowRight':
+                    e.preventDefault();
+                    this.animateAndHandleSwipe(currentCard, 'right');
+                    break;
+                case 'Escape':
+                    if (currentCard.style.transform) {
+                        currentCard.style.transform = '';
+                        currentCard.classList.remove('swiping-left', 'swiping-right');
+                    }
+                    break;
+            }
         });
     }
 
-};
+    getCurrentCard() {
+        const cards = this.cardStack.querySelectorAll('.song-card');
+        if (cards.length === 0) return null;
+        return Array.from(cards).reduce((highest, current) => {
+            const currentZ = parseInt(current.style.zIndex) || 0;
+            const highestZ = parseInt(highest.style.zIndex) || 0;
+            return currentZ > highestZ ? current : highest;
+        });
+    }
 
+    initializeCards() {
+        this.cardStack.innerHTML = '';
+        const initialCards = this.allSongs.slice(this.currentIndex, this.currentIndex + 3);
+        initialCards.forEach((song, index) => {
+            const card = this.createCard(song);
+            card.style.zIndex = initialCards.length - index;
+            this.cardStack.appendChild(card);
+            this.initializeSwipe(card);
+        });
+    }
 
+    createCard(song) {
+        const card = document.createElement('div');
+        card.classList.add('song-card');
+        card.dataset.trackId = song.track.id;
+        card.setAttribute('tabindex', '0');
+        card.setAttribute('role', 'button');
+        card.setAttribute('aria-label', `${song.track.name} by ${song.track.artists.map(artist => artist.name).join(', ')}. Use arrow keys to navigate.`);
+
+        card.innerHTML = `
+            <div class="song-card-inner">
+                <img src="${song.track.album.images[0].url}" alt="${song.track.name} album cover" class="song-image">
+                <div class="song-info">
+                    <h3 class="song-title">${song.track.name}</h3>
+                    <p class="song-artist">${song.track.artists.map(artist => artist.name).join(', ')}</p>
+                    <p class="song-album">${song.track.album.name}</p>
+                </div>
+                <div class="swipe-indicators">
+                    <div class="swipe-left">Remove</div>
+                    <div class="swipe-right">Skip</div>
+                </div>
+            </div>
+        `;
+
+        return card;
+    }
+
+    initializeSwipe(element) {
+        let startX = 0;
+        let startY = 0;
+        let currentX = 0;
+        let currentY = 0;
+        let isDragging = false;
+        let initialRotation = 0;
+
+        const handleStart = (e) => {
+            if (e.type === 'touchstart') e.preventDefault();
+            isDragging = true;
+            startX = e.type === 'mousedown' ? e.clientX : e.touches[0].clientX;
+            startY = e.type === 'mousedown' ? e.clientY : e.touches[0].clientY;
+            element.style.transition = 'none';
+
+            const transform = element.style.transform;
+            initialRotation = transform ? parseFloat(transform.match(/rotate\(([-\d.]+)deg\)/)?.[1] || 0) : 0;
+        };
+
+        const handleMove = (e) => {
+            if (!isDragging) return;
+
+            e.preventDefault();
+            currentX = e.type === 'mousemove' ? e.clientX : e.touches[0].clientX;
+            currentY = e.type === 'mousemove' ? e.clientY : e.touches[0].clientY;
+
+            const deltaX = currentX - startX;
+            const deltaY = currentY - startY;
+            const rotation = initialRotation + (deltaX * 0.1);
+
+            element.style.transform = `translate(${deltaX}px, ${deltaY}px) rotate(${rotation}deg)`;
+            this.updateSwipeIndicators(element, deltaX);
+        };
+
+        const handleEnd = async () => {
+            if (!isDragging) return;
+            isDragging = false;
+
+            const deltaX = currentX - startX;
+            element.style.transition = 'transform 0.3s ease-out';
+
+            if (Math.abs(deltaX) > 100) {
+                const swipeDirection = deltaX > 0 ? 'right' : 'left';
+                await this.animateAndHandleSwipe(element, swipeDirection);
+            } else {
+                element.style.transform = '';
+            }
+
+            element.classList.remove('swiping-left', 'swiping-right');
+        };
+
+        element.addEventListener('mousedown', handleStart);
+        element.addEventListener('touchstart', handleStart, { passive: false });
+        document.addEventListener('mousemove', handleMove);
+        document.addEventListener('touchmove', handleMove, { passive: false });
+        document.addEventListener('mouseup', handleEnd);
+        document.addEventListener('touchend', handleEnd);
+    }
+
+    updateSwipeIndicators(element, deltaX) {
+        const opacity = Math.min(Math.abs(deltaX) / 100, 1);
+
+        if (deltaX > 50) {
+            element.classList.add('swiping-right');
+            element.classList.remove('swiping-left');
+            element.querySelector('.swipe-right').style.opacity = opacity;
+        } else if (deltaX < -50) {
+            element.classList.add('swiping-left');
+            element.classList.remove('swiping-right');
+            element.querySelector('.swipe-left').style.opacity = opacity;
+        } else {
+            element.classList.remove('swiping-left', 'swiping-right');
+            element.querySelectorAll('.swipe-left, .swipe-right')
+                .forEach(el => el.style.opacity = 0);
+        }
+    }
+
+    async animateAndHandleSwipe(card, direction) {
+        const swipeOutDistance = direction === 'right' ? window.innerWidth : -window.innerWidth;
+        card.classList.add(`swiping-${direction}`);
+        card.style.transition = 'transform 0.3s ease-out';
+        card.style.transform = `translateX(${swipeOutDistance}px) rotate(${direction === 'right' ? 30 : -30}deg)`;
+
+        try {
+            const trackId = card.dataset.trackId;
+            if (direction === 'left') {
+                await SpotifyAPI.removeLikedSong(AuthState.accessToken, trackId);
+            }
+
+            setTimeout(() => {
+                card.remove();
+                this.loadNextCard();
+            }, 300);
+        } catch (error) {
+            console.error('Swipe action failed:', error);
+            card.style.transform = '';
+            card.classList.remove(`swiping-${direction}`);
+            alert('Action failed. Please try again.');
+        }
+    }
+
+    loadNextCard() {
+        this.currentIndex++;
+
+        if (this.currentIndex >= this.allSongs.length) {
+            if (this.onEmpty) this.onEmpty();
+            return;
+        }
+
+        const nextSong = this.allSongs[this.currentIndex];
+        const newCard = this.createCard(nextSong);
+        newCard.style.zIndex = 1;
+        this.cardStack.appendChild(newCard);
+        this.initializeSwipe(newCard);
+
+        Array.from(this.cardStack.children).forEach((card, index, array) => {
+            card.style.zIndex = array.length - index;
+        });
+    }
+}
+
+// Function to refresh the access token
+async function refreshAccessToken() {
+    const refreshToken = AuthState.getRefreshToken();
+    if (!refreshToken) {
+        throw new Error('No refresh token available');
+    }
+
+    const response = await fetch('/api/refresh-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to refresh access token');
+    }
+
+    const data = await response.json();
+    AuthState.setAuth(data.accessToken);
+    return data.accessToken;
+}
+
+// 401 Error Handling with Token Refresh
+async function handleApiError(error) {
+    console.error('API Error encountered:', error);
+
+    if (error.message.includes('401')) {
+        console.log('401 Unauthorized error detected. Attempting token refresh...');
+        try {
+            const newAccessToken = await refreshAccessToken();
+            alert('Session refreshed. Please try again.');
+            return newAccessToken;
+        } catch (refreshError) {
+            console.error('Token refresh failed:', refreshError.message);
+            alert('Session expired. Please log in again.');
+            AuthState.clearAuth();
+            UIManager.updateUIState(false);
+            window.location.href = '/login';
+        }
+    } else {
+        alert('An error occurred. Please try again later.');
+    }
+}
 
 // Main app initialization
 document.addEventListener('DOMContentLoaded', async () => {
@@ -152,175 +371,37 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.location.href = '/login';
     });
 
-    ui.elements.songContainer.addEventListener('click', async (event) => {
-        if (event.target.classList.contains('like-button')) {
-            const trackId = event.target.dataset.trackId;
-            try {
-                await SpotifyAPI.likeSong(trackId, auth.accessToken);
-                event.target.textContent = 'Liked!';
-                event.target.disabled = true;
-            } catch (error) {
-                alert('Failed to like song. Please try again.');
-            }
-        }
-    });
-
-
     if (auth.isAuthenticated) {
         try {
             ui.showLoading();
             // Fetch the songs first
             const response = await SpotifyAPI.fetchLikedSongs(auth.accessToken);
-            const allSongs = response.items; // Store the songs
-            let currentSongIndex = 0; // Initialize the index
-
-            // Get the card stack container
             const cardStack = document.getElementById('card-stack');
+
             if (!cardStack) {
-                console.error('Card stack container not found');
-                return;
+                throw new error('Card stack container not found');
             }
 
-            // Render initial songs
-            card.renderSongList(allSongs, cardStack);
-
-            function loadNextCard() {
-                currentSongIndex++;
-                if (currentSongIndex < allSongs.length) {
-                    const newCard = card.renderSong(allSongs[currentSongIndex]);
-                    newCard.style.zIndex = 1;
-                    cardStack.appendChild(newCard);
-                    initializeSwipe(newCard);
-                } else {
-                    console.log('No more songs to show.');
-                    cardStack.innerHTML = '<p>No more songs available!</p>';
+            new SwipeManager(
+                cardStack,
+                response.items,
+                () => {
+                    cardStack.innerHTML = `
+                        <div class="no-more-songs">
+                            <h2>All Done!</h2>
+                            <p>No more songs to review</p>
+                            <button onclick="window.location.reload()">
+                                Start Over
+                            </button>
+                        </div>
+                    `;
                 }
-            }
-
+            );
         } catch (error) {
             console.error('Error loading songs:', error);
-            if (error.message.includes('401')) {
-                auth.clearAuth();
-                ui.updateUIState(false);
-                alert('Session expired. Please log in again.');
-            } else {
-                alert('Failed to load songs. Please try again.');
-            }
+            await handleApiError(error);
         } finally {
             ui.hideLoading();
-        }
-    }
-
-
-    // Swipe handling functions
-    function initializeSwipe(element) {
-        console.log('Initializing swipe for element:', element);
-        let startX;
-        let currentX;
-
-        element.addEventListener('mousedown', startSwipe);
-        element.addEventListener('touchstart', startSwipe);
-
-        function startSwipe(e) {
-            console.log('Swipe started');
-            startX = e.type === 'mousedown' ? e.clientX : e.touches[0].clientX;
-            document.addEventListener('mousemove', swipeMove);
-            document.addEventListener('touchmove', swipeMove);
-            document.addEventListener('mouseup', swipeEnd);
-            document.addEventListener('touchend', swipeEnd);
-        }
-
-        function swipeMove(e) {
-            currentX = e.type === 'mousemove' ? e.clientX : e.touches[0].clientX;
-            const deltaX = currentX - startX;
-            console.log('Swipe move. DeltaX:', deltaX);
-            element.style.transform = `translateX(${deltaX}px) rotate(${deltaX * 0.1}deg)`;  // Visual swipe effect
-        }
-
-        function swipeEnd() {
-            console.log('Swipe ended');
-            const deltaX = currentX - startX;
-            if (Math.abs(deltaX) > 100) {
-                if (deltaX > 0) {
-                    console.log('Right swipe detected');
-                    handleRightSwipe(element);  // Handle right swipe (e.g., like)
-                } else {
-                    console.log('Left swipe detected');
-                    handleLeftSwipe(element);  // Handle left swipe (e.g., remove from liked)
-                }
-            } else {
-                console.log('Swipe below threshold. Resetting position.');
-                element.style.transform = '';  // Reset position if swipe is not significant
-            }
-
-            cleanup();
-        }
-
-        function cleanup() {
-            console.log('Cleaning up swipe listeners...');
-            document.removeEventListener('mousemove', swipeMove);
-            document.removeEventListener('touchmove', swipeMove);
-            document.removeEventListener('mouseup', swipeEnd);
-            document.removeEventListener('touchend', swipeEnd);
-        }
-
-        async function handleLeftSwipe(card) {
-            console.log('Handling left swipe for card:', card);
-            const trackId = card.dataset.trackId;
-            try {
-                await SpotifyAPI.removeLikedSong(AuthState.accessToken, trackId);  // API call to remove liked song
-                removeCard(card);  // Remove the card from UI
-            } catch (error) {
-                console.error('Failed to remove song:', error);
-                card.style.transform = '';  // Reset transformation if error occurs
-            }
-        }
-
-        function handleRightSwipe(card) {
-            console.log('Handling right swipe for card:', card);
-            removeCard(card);  // Only remove the card on right swipe, assuming like action elsewhere
-        }
-
-        function removeCard(card) {
-            console.log('Removing card:', card);
-            card.style.transform = 'translateX(100vw)';
-            setTimeout(() => {
-                card.remove();  // Remove the card from DOM
-                console.log('Card removed. Loading next card...');
-                loadNextCard();  // Load the next song card after removal
-            }, 300);
-        }
-
-        function loadNextCard() {
-            console.log('Loading next card...');
-            currentSongIndex++;
-            if (currentSongIndex < allSongs.length) {
-                const newCard = card.renderSong(allSongs[currentSongIndex]);  // Render the next song card
-                newCard.style.zIndex = 1;
-                document.getElementById('card-stack').appendChild(newCard);
-                initializeSwipe(newCard);  // Initialize swipe for the new card
-            } else {
-                console.log('No more songs to show.');
-                const cardStack = document.getElementById('card-stack');
-                if (cardStack) {
-                    cardStack.innerHTML = '<p>No more songs available!</p>';  // Show "No more songs" message
-                }
-            }
-        }
-    }
-
-
-    // 401 error handling 
-    async function handleApiError(error) {
-        console.error('API Error encountered:', error);
-        if (error.message.includes('401')) {
-            console.log('401 Unauthorized error detected. Clearing AuthState...');
-            AuthState.clearAuth();
-            UIManager.updateUIState(false);
-            alert('Session expired. Please log in again.');
-            window.location.href = '/login';
-        } else {
-            alert('An error occurred. Please try again later.');
         }
     }
 })

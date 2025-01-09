@@ -75,7 +75,7 @@ body {
     perspective: 1000px;
 }
 
-.song {
+.song-card {
     position: absolute;
     width: 100%;
     background: #191414;
@@ -114,15 +114,33 @@ body {
     color: #1ed760;
 }
 
+.swipe-indicators {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 20px;
+    pointer-events: none;
+}
+
 .swipe-left {
+    background-color: rgba(255, 0, 0, 0.8);
+    color: white;
     transform: translateX(-150%) rotate(-30deg);
     opacity: 0;
+    transition: opacity 0.2s;
 }
 
 .swipe-right {
+    background-color: rgba(0, 255, 0, 0.8);
+    color: white;
     transform: translateX(150%) rotate(30deg);
     opacity: 0;
+    transition: opacity 0.2s;
 }
+
 
 .swipe-feedback {
     position: fixed;
@@ -132,4 +150,17 @@ body {
     justify-content: center;
     gap: 20px;
     pointer-events: none;
+}
+
+.song-card.swiping-left {
+    background-color: rgba(255, 0, 0, 0.05);
+}
+
+.song-card.swiping-right {
+    background-color: rgba(0, 255, 0, 0.05);
+}
+
+.no-more-songs {
+    text-align: center;
+    padding: 20px;
 }
