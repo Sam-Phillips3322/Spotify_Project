@@ -108,6 +108,8 @@ class SwipeManager {
         this.allSongs = allSongs;
         this.currentIndex = 0;
         this.onEmpty = onEmpty;
+        this.processedSongs = new Set();
+        this.availableSongs = [...allSongs];
 
         this.initializeCards();
         this.setupKeyboardControls();
@@ -149,7 +151,7 @@ class SwipeManager {
 
     initializeCards() {
         this.cardStack.innerHTML = '';
-        const initialCards = this.allSongs.slice(this.currentIndex, this.currentIndex + 3);
+        const initialCards = this.availableSongs.slice(0, 3);
         initialCards.forEach((song, index) => {
             const card = this.createCard(song);
             card.style.zIndex = initialCards.length - index;
@@ -269,9 +271,12 @@ class SwipeManager {
 
         try {
             const trackId = card.dataset.trackId;
+            this.processedSongs.add(trackId);
             if (direction === 'left') {
                 await SpotifyAPI.removeLikedSong(AuthState.accessToken, trackId);
             }
+
+            this.availableSongs = this.availableSongs.filter(song => song.track.id !== trackId);
 
             setTimeout(() => {
                 card.remove();
@@ -286,14 +291,18 @@ class SwipeManager {
     }
 
     loadNextCard() {
-        this.currentIndex++;
-
-        if (this.currentIndex >= this.allSongs.length) {
+        if (this.availableSongs.length === 0) {
             if (this.onEmpty) this.onEmpty();
             return;
         }
 
-        const nextSong = this.allSongs[this.currentIndex];
+        const nextSong = this.availableSongs[0];
+
+        if (!nextSong) {
+            if (this.onEmpty) this.onEmpty();
+            return;
+        }
+
         const newCard = this.createCard(nextSong);
         newCard.style.zIndex = 1;
         this.cardStack.appendChild(newCard);
