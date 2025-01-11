@@ -81,9 +81,9 @@ const UIManager = {
 
 // API Service
 const SpotifyAPI = {
-    async fetchLikedSongs(token) {
-        console.log('Fetching liked songs with token:', token);
-        const response = await fetch('/api/liked-songs', {
+    async fetchLikedSongs(token, offset = 0, limit = 20) {
+        console.log(`Fetching liked songs with token and offset: ${offset}, limit ${limit}`, token);
+        const response = await fetch(`/api/liked-songs?offset=${offset}&limit=${limit}`, {
             headers: {
                 'Authorization': `Bearer ${token}`,
             }
@@ -103,13 +103,27 @@ const SpotifyAPI = {
 };
 
 class SwipeManager {
-    constructor(cardStackElement, allSongs, onEmpty) {
+    constructor(cardStackElement, initialSongs, onEmpty) {
         this.cardStack = cardStackElement;
-        this.allSongs = allSongs;
-        this.currentIndex = 0;
-        this.onEmpty = onEmpty;
+        this.onEmpty = () => {
+            const template = document.getElementById('no-more-songs-template');
+
+            this.cardStack.innerHTML = '';
+
+            this.cardStack.appendChild(template.content.cloneNode(true));
+
+            if (onEmpty) onEmpty();
+        };
         this.processedSongs = new Set();
-        this.availableSongs = [...allSongs];
+        this.availableSongs = [...initialSongs.items];
+        this.isLoading = false;
+
+        this.currentOffset = 20;
+        this.totalSongs = initialSongs.total;
+        this.minimumSongsThreshold = 5;
+        this.batchSize = 20;
+
+        this.loadingScreen = this.cardStack.querySelector('#loading-screen')
 
         this.initializeCards();
         this.setupKeyboardControls();
@@ -139,6 +153,57 @@ class SwipeManager {
         });
     }
 
+    updateLoadingProgress() {
+        const processedCount = this.loadingScreen.querySelector('.processed-count');
+        const totalCount = this.loadingScreen.querySelector('.total-count');
+        if (processedCount && totalCount) {
+            processedCount.textContent = this.processedSongs.size;
+            totalCount.textContent = this.totalSongs;
+        }
+    }
+
+    showLoadingScreen() {
+        this.loadingScreen.classList.remove('hidden');
+        this.updateLoadingProgress();
+    }
+
+    hideLoadingScreen() {
+        this.loadingScreen.classList.add('hidden');
+    }
+
+    async loadMoreSongs() {
+        if (this.isLoading) return;
+
+        if (this.currentOffset >= this.totalSongs) return;
+
+        try {
+            this.isLoading = true;
+            this.showLoadingScreen();
+            const response = await SpotifyAPI.fetchLikedSongs(
+                AuthState.accessToken,
+                this.currentOffset,
+                this.batchSize
+            );
+
+            this.availableSongs.push(...response.items);
+            this.currentOffset += response.items.length;
+
+            console.log(`Loaded more songs. Total available: ${this.availableSongs.length}`);
+        } catch (error) {
+            console.error('Error loading more songs:', error);
+        } finally {
+            this.isLoading = false;
+            this.hideLoadingScreen();
+        }
+    }
+
+    async checkAndLoadMoreSongs() {
+        if (this.availableSongs.length <= this.minimumSongsThreshold &&
+            this.currentOffset < this.totalSongs) {
+            await this.loadMoreSongs();
+        }
+    }
+
     getCurrentCard() {
         const cards = this.cardStack.querySelectorAll('.song-card');
         if (cards.length === 0) return null;
@@ -161,27 +226,19 @@ class SwipeManager {
     }
 
     createCard(song) {
-        const card = document.createElement('div');
-        card.classList.add('song-card');
+        const template = document.getElementById('song-card-template');
+        const card = template.content.cloneNode(true).querySelector('.song-card');
+
         card.dataset.trackId = song.track.id;
-        card.setAttribute('tabindex', '0');
-        card.setAttribute('role', 'button');
         card.setAttribute('aria-label', `${song.track.name} by ${song.track.artists.map(artist => artist.name).join(', ')}. Use arrow keys to navigate.`);
 
-        card.innerHTML = `
-            <div class="song-card-inner">
-                <img src="${song.track.album.images[0].url}" alt="${song.track.name} album cover" class="song-image">
-                <div class="song-info">
-                    <h3 class="song-title">${song.track.name}</h3>
-                    <p class="song-artist">${song.track.artists.map(artist => artist.name).join(', ')}</p>
-                    <p class="song-album">${song.track.album.name}</p>
-                </div>
-                <div class="swipe-indicators">
-                    <div class="swipe-left">Remove</div>
-                    <div class="swipe-right">Skip</div>
-                </div>
-            </div>
-        `;
+        const image = card.querySelector('.song-image');
+        image.src = song.track.album.images[0].url;
+        image.alt = `${song.track.name} album cover`;
+
+        card.querySelector('.song-title').textContent = song.track.name;
+        card.querySelector('.song-artist').textContent = song.track.artists.map(artist => artist.name).join(', ');
+        card.querySelector('.song-album').textContent = song.track.album.name;
 
         return card;
     }
@@ -278,6 +335,8 @@ class SwipeManager {
 
             this.availableSongs = this.availableSongs.filter(song => song.track.id !== trackId);
 
+            await this.checkAndLoadMoreSongs();
+
             setTimeout(() => {
                 card.remove();
                 this.loadNextCard();
@@ -292,16 +351,27 @@ class SwipeManager {
 
     loadNextCard() {
         if (this.availableSongs.length === 0) {
-            if (this.onEmpty) this.onEmpty();
+            if (this.currentOffset >= this.totalSongs) {
+                if (this.onEmpty) this.onEmpty();
+                return;
+            }
+            this.loadMoreSongs().then(() => {
+                if (this.availableSongs.length > 0) {
+                    this.hideLoadingScreen();
+                    this.createAndAddCard();
+                } else if (this.onEmpty) {
+                    this.onEmpty();
+                }
+            });
             return;
         }
 
+        this.createAndAddCard();
+    }
+
+    createAndAddCard() {
         const nextSong = this.availableSongs[0];
-
-        if (!nextSong) {
-            if (this.onEmpty) this.onEmpty();
-            return;
-        }
+        if (!nextSong) return;
 
         const newCard = this.createCard(nextSong);
         newCard.style.zIndex = 1;
@@ -384,7 +454,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             ui.showLoading();
             // Fetch the songs first
-            const response = await SpotifyAPI.fetchLikedSongs(auth.accessToken);
+            const response = await SpotifyAPI.fetchLikedSongs(auth.accessToken, 0, 20);
             const cardStack = document.getElementById('card-stack');
 
             if (!cardStack) {
@@ -393,17 +463,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             new SwipeManager(
                 cardStack,
-                response.items,
+                response,
                 () => {
-                    cardStack.innerHTML = `
-                        <div class="no-more-songs">
-                            <h2>All Done!</h2>
-                            <p>No more songs to review</p>
-                            <button onclick="window.location.reload()">
-                                Start Over
-                            </button>
-                        </div>
-                    `;
+                    console.log('All songs processed');
                 }
             );
         } catch (error) {

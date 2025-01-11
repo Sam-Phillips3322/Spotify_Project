@@ -4,8 +4,12 @@ body {
     padding: 50px;
     background-color: #1db954;
     color: #ffffff;
+    margin: 0;
+    min-height: 100vh;
+    box-sizing: border-box;
 }
 
+/* Login Button Styles */
 .login-btn {
     display: inline-block;
     background-color: #191414;
@@ -16,6 +20,8 @@ body {
     text-decoration: none;
     margin-top: 20px;
     cursor: pointer;
+    border: none;
+    transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 .login-btn:hover {
@@ -23,7 +29,7 @@ body {
     color: #000000;
 }
 
-
+/* Loading Spinner */
 #loading-spinner {
     position: fixed;
     top: 50%;
@@ -38,21 +44,16 @@ body {
     z-index: 1000;
 }
 
-@keyframes spin {
-    0% {
-        transform: translate(-50%, -50%) rotate(0deg);
-    }
-
-    100% {
-        transform: translate(-50%, -50%) rotate(360deg);
-    }
-}
-
-
 .hidden {
     display: none !important;
 }
 
+/* App Container Styles */
+.app {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
 
 .app h1 {
     color: #ffffff;
@@ -66,6 +67,7 @@ body {
     margin: 20px 0;
 }
 
+/* Card Stack and Cards */
 .card-stack {
     position: relative;
     width: 100%;
@@ -82,9 +84,17 @@ body {
     border-radius: 15px;
     padding: 20px;
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
-    transition: transform 0.3s ease;
+    transition: transform 0.3s ease, background-color 0.3s ease;
     cursor: grab;
     backface-visibility: hidden;
+    box-sizing: border-box;
+    top: 0;
+    left: 0;
+}
+
+.song-card-inner {
+    position: relative;
+    width: 100%;
 }
 
 .song-image {
@@ -114,6 +124,13 @@ body {
     color: #1ed760;
 }
 
+.song-album {
+    margin: 5px 0 0;
+    font-size: 0.9rem;
+    color: #cccccc;
+}
+
+/* Swipe Indicators */
 .swipe-indicators {
     position: absolute;
     top: 50%;
@@ -125,42 +142,141 @@ body {
     pointer-events: none;
 }
 
+.swipe-left,
+.swipe-right {
+    padding: 10px 20px;
+    border-radius: 5px;
+    font-weight: bold;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
 .swipe-left {
-    background-color: rgba(255, 0, 0, 0.8);
+    background-color: rgba(255, 59, 48, 0.8);
     color: white;
     transform: translateX(-150%) rotate(-30deg);
-    opacity: 0;
-    transition: opacity 0.2s;
 }
 
 .swipe-right {
-    background-color: rgba(0, 255, 0, 0.8);
+    background-color: rgba(52, 199, 89, 0.8);
     color: white;
     transform: translateX(150%) rotate(30deg);
-    opacity: 0;
-    transition: opacity 0.2s;
 }
 
+/* Card States */
+.song-card.swiping-left .swipe-left {
+    opacity: 1;
+}
 
-.swipe-feedback {
-    position: fixed;
-    bottom: 20px;
-    width: 100%;
-    display: flex;
-    justify-content: center;
-    gap: 20px;
-    pointer-events: none;
+.song-card.swiping-right .swipe-right {
+    opacity: 1;
 }
 
 .song-card.swiping-left {
-    background-color: rgba(255, 0, 0, 0.05);
+    background-color: rgba(255, 59, 48, 0.05);
 }
 
 .song-card.swiping-right {
-    background-color: rgba(0, 255, 0, 0.05);
+    background-color: rgba(52, 199, 89, 0.05);
 }
 
+/* No More Songs Screen */
 .no-more-songs {
     text-align: center;
     padding: 20px;
+    background: #191414;
+    border-radius: 15px;
+    color: #ffffff;
+}
+
+.no-more-songs button {
+    background-color: #1ed760;
+    color: #000000;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    font-size: 1rem;
+    cursor: pointer;
+    margin-top: 20px;
+    transition: background-color 0.3s ease;
+}
+
+.no-more-songs button:hover {
+    background-color: #1db954;
+}
+
+/* Loading Screen */
+.loading-screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(25, 20, 20, 0.9);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    border-radius: 12px;
+    backdrop-filter: blur(5px);
+}
+
+.loading-content {
+    text-align: center;
+    padding: 20px;
+    color: #ffffff;
+}
+
+.loading-spinner {
+    width: 50px;
+    height: 50px;
+    border: 5px solid #333333;
+    border-top: 5px solid #1ed760;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 20px;
+}
+
+.loading-text {
+    font-size: 1.2em;
+    color: #ffffff;
+    margin: 10px 0;
+}
+
+.loading-progress {
+    font-size: 0.9em;
+    color: #cccccc;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    body {
+        padding: 20px;
+    }
+
+    .song-card {
+        padding: 15px;
+    }
+
+    .song-image {
+        height: 250px;
+    }
+
+    .song-title {
+        font-size: 1.2rem;
+    }
+
+    .song-artist {
+        font-size: 1rem;
+    }
 }

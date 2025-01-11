@@ -10,27 +10,60 @@
 
 <body>
     <div class="app">
-        <!-- Welcome content (will be hidden after login) -->
         <div id="welcome-content">
             <h1>Get ready to clean up your music with Song Sorter</h1>
             <p>Log in to Spotify to manage your liked songs</p>
         </div>
 
-        <!-- Login Button (visible when not authenticated) -->
         <button id="login-button" class="login-btn">Log in with Spotify</button>
 
-        <!-- Loading Spinner (hidden by default) -->
         <div id="loading-spinner" class="spinner hidden">
             <div class="spinner-inner"></div>
         </div>
 
-        <!-- Displaying Songs Section (visible when user is authenticated) -->
         <div id="song-container">
             <h2>Liked Songs</h2>
-            <div id="card-stack" class="card-stack"></div>
+            <div id="card-stack" class="card-stack">
+                <div id="loading-screen" class="loading-screen hidden">
+                    <div class="loading-content">
+                        <div class="loading-spinner"></div>
+                        <h3 class="loading-text">Loading more songs...</h3>
+                        <p class="loading-progress">
+                            Processed: <span class="processed-count">0</span> /
+                            Total: <span class="total-count">0</span>
+                        </p>
+                    </div>
+                </div>
+            </div>
             <div id="swipe-feedback" class="swipe-feedback"></div>
         </div>
+
     </div>
+
+    <template id="song-card-template">
+        <div class="song-card" tabindex="0" role="button">
+            <div class="song-card-inner">
+                <img class="song-image" alt="">
+                <div class="song-info">
+                    <h3 class="song-title"></h3>
+                    <p class="song-artist"></p>
+                    <p class="song-album"></p>
+                </div>
+                <div class="swipe-indicators">
+                    <div class="swipe-left">Remove</div>
+                    <div class="swipe-right">Skip</div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <template id="no-more-songs-template">
+        <div class="no-more-songs">
+            <h2>All Done!</h2>
+            <p>No more songs to review</p>
+            <button onclick="window.location.reload()">Start Over</button>
+        </div>
+    </template>
 
     <script src="script.js"></script>
 </body>

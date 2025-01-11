@@ -108,15 +108,15 @@ const SpotifyService = {
 
 
     async fetchLikedSongs(accessToken, limit = 20, offset = 0) {
-        console.log('Fetching liked songs from Spotify...');
+        console.log(`Fetching liked songs from Spotify...Offset: ${offset}, Limit: ${limit}`);
         const response = await axios.get(
             `${SPOTIFY_CONFIG.apiUrl}/me/tracks`,
             {
                 headers: { Authorization: `Bearer ${accessToken}` },
-                params: { limit, offset }
+                params: { limit, offset, market: 'from_token' }
             }
         );
-        console.log('Fetched liked songs:', response.data);
+        console.log('Fetched liked songs:', response.data.items.length);
         return response.data;
     },
 
@@ -177,10 +177,12 @@ app.get('/api/liked-songs', async (req, res) => {
     }
 
     const token = authHeader.split(' ')[1];
+    const offset = parseInt(req.query.offset) || 0;
+    const limit = parseInt(req.query.limit) || 20;
     console.log('Fetching liked songs with token:', token);
 
     try {
-        const response = await SpotifyService.fetchLikedSongs(token);
+        const response = await SpotifyService.fetchLikedSongs(token, offset, limit);
         console.log('Fetched liked songs from Spotify API:', response);
         res.json(response);
     } catch (error) {
