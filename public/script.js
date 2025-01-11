@@ -8,14 +8,18 @@ const AuthState = {
         this.accessToken = localStorage.getItem('accessToken');
         this.isAuthenticated = !!this.accessToken;
         console.log('AuthState initialized:', {
-            accessToken: this.accessToken,
-            isAuthenticated: this.isAuthenticated,
+            hasToken: !!this.accessToken,
+            isAuth: this.isAuthenticated
         });
         return this;
     },
 
     setAuth(token) {
-        console.log('Setting authentication token:', token);
+        if (!token) {
+            console.error('Attempted to set empty token');
+            return;
+        }
+        console.log('Setting new token:', token.substring(0, 10) + '...');
         this.accessToken = token;
         this.isAuthenticated = true;
         localStorage.setItem('accessToken', token);
@@ -82,12 +86,19 @@ const UIManager = {
 // API Service
 const SpotifyAPI = {
     async fetchLikedSongs(token, offset = 0, limit = 20) {
-        console.log(`Fetching liked songs with token and offset: ${offset}, limit ${limit}`, token);
+        if (!token) {
+            console.error('Token is missing in fetchLikedSongs');
+            throw new Error('No authentication token provided');
+        }
+
+        console.log('Making API call with token:', token.substring(0, 10) + '...');
+
         const response = await fetch(`/api/liked-songs?offset=${offset}&limit=${limit}`, {
             headers: {
                 'Authorization': `Bearer ${token}`,
             }
         });
+
         if (!response.ok) throw new Error('Failed to fetch liked songs');
         return response.json();
     },
@@ -104,6 +115,14 @@ const SpotifyAPI = {
 
 class SwipeManager {
     constructor(cardStackElement, initialSongs, onEmpty) {
+        if (!AuthState.accessToken) {
+            throw new Error('No authentication token available');
+        }
+
+        this.accessToken = AuthState.accessToken;  // Store token reference
+        this.processedSongIds = new Set();
+        this.availableSongs = [...initialSongs.items];
+
         this.cardStack = cardStackElement;
         this.onEmpty = () => {
             const template = document.getElementById('no-more-songs-template');
@@ -114,16 +133,16 @@ class SwipeManager {
 
             if (onEmpty) onEmpty();
         };
-        this.processedSongs = new Set();
-        this.availableSongs = [...initialSongs.items];
         this.isLoading = false;
-
-        this.currentOffset = 20;
+        this.currentOffset = initialSongs.items.length;
         this.totalSongs = initialSongs.total;
         this.minimumSongsThreshold = 5;
         this.batchSize = 20;
 
         this.loadingScreen = this.cardStack.querySelector('#loading-screen')
+
+        console.log('Initial songs loaded:', this.availableSongs.length);
+        console.log('Total songs available:', this.totalSongs);
 
         this.initializeCards();
         this.setupKeyboardControls();
@@ -172,20 +191,29 @@ class SwipeManager {
     }
 
     async loadMoreSongs() {
-        if (this.isLoading) return;
-
+        if (this.isLoading || !this.accessToken) return;
         if (this.currentOffset >= this.totalSongs) return;
 
         try {
             this.isLoading = true;
             this.showLoadingScreen();
+
+            console.log('Loading more songs from offset:', this.currentOffset);
+
             const response = await SpotifyAPI.fetchLikedSongs(
                 AuthState.accessToken,
                 this.currentOffset,
                 this.batchSize
             );
 
-            this.availableSongs.push(...response.items);
+            const newSongs = response.items.filter(song =>
+                !this.processedSongIds.has(song.track.id)
+            );
+
+            console.log('New unique songs loaded:', newSongs.length);
+
+
+            this.availableSongs.push(...newSongs);
             this.currentOffset += response.items.length;
 
             console.log(`Loaded more songs. Total available: ${this.availableSongs.length}`);
@@ -321,6 +349,7 @@ class SwipeManager {
     }
 
     async animateAndHandleSwipe(card, direction) {
+        // Set up initial animation
         const swipeOutDistance = direction === 'right' ? window.innerWidth : -window.innerWidth;
         card.classList.add(`swiping-${direction}`);
         card.style.transition = 'transform 0.3s ease-out';
@@ -328,21 +357,43 @@ class SwipeManager {
 
         try {
             const trackId = card.dataset.trackId;
-            this.processedSongs.add(trackId);
-            if (direction === 'left') {
-                await SpotifyAPI.removeLikedSong(AuthState.accessToken, trackId);
+
+            // Token validation
+            if (!this.accessToken) {
+                throw new Error('No authentication token available');
             }
 
-            this.availableSongs = this.availableSongs.filter(song => song.track.id !== trackId);
+            // Only process if not already processed
+            if (!this.processedSongIds.has(trackId)) {
+                // Add to processed songs set
+                this.processedSongIds.add(trackId);
 
+                // If swiped left, remove from Spotify likes
+                if (direction === 'left') {
+                    await SpotifyAPI.removeLikedSong(this.accessToken, trackId);
+                }
+
+                // Remove the song from available songs array
+                this.availableSongs = this.availableSongs.filter(song =>
+                    song.track.id !== trackId
+                );
+
+                console.log('Processed song:', trackId);
+                console.log('Remaining songs:', this.availableSongs.length);
+            }
+
+            // Check if we need to load more songs
             await this.checkAndLoadMoreSongs();
 
+            // Remove card and load next after animation
             setTimeout(() => {
                 card.remove();
                 this.loadNextCard();
             }, 300);
+
         } catch (error) {
             console.error('Swipe action failed:', error);
+            // Reset card position if action fails
             card.style.transform = '';
             card.classList.remove(`swiping-${direction}`);
             alert('Action failed. Please try again.');
@@ -372,6 +423,12 @@ class SwipeManager {
     createAndAddCard() {
         const nextSong = this.availableSongs[0];
         if (!nextSong) return;
+
+        if (this.processedSongIds.has(nextSong.track.id)) {
+            this.availableSongs.shift(); // Remove the duplicate
+            this.createAndAddCard(); // Try next song
+            return;
+        }
 
         const newCard = this.createCard(nextSong);
         newCard.style.zIndex = 1;
@@ -430,7 +487,7 @@ async function handleApiError(error) {
 
 // Main app initialization
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('DOM fully loaded and parsed.');
+    console.log('Initializing app...');
     const auth = AuthState.init();
     const ui = UIManager.init();
 
@@ -450,15 +507,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.location.href = '/login';
     });
 
-    if (auth.isAuthenticated) {
+    if (auth.isAuthenticated && auth.accessToken) {
         try {
             ui.showLoading();
-            // Fetch the songs first
+            console.log('Fetching songs with token:', auth.accessToken.substring(0, 10) + '...');
+
             const response = await SpotifyAPI.fetchLikedSongs(auth.accessToken, 0, 20);
             const cardStack = document.getElementById('card-stack');
 
             if (!cardStack) {
-                throw new error('Card stack container not found');
+                throw new Error('Card stack container not found');
             }
 
             new SwipeManager(
@@ -469,10 +527,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             );
         } catch (error) {
-            console.error('Error loading songs:', error);
+            console.error('Error during initialization:', error);
             await handleApiError(error);
         } finally {
             ui.hideLoading();
         }
+    } else {
+        console.log('User not authenticated or token missing');
     }
 })

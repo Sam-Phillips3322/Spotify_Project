@@ -176,14 +176,16 @@ app.get('/api/liked-songs', async (req, res) => {
         return res.status(401).json({ error: 'No authorization header' });
     }
 
-    const token = authHeader.split(' ')[1];
-    const offset = parseInt(req.query.offset) || 0;
-    const limit = parseInt(req.query.limit) || 20;
-    console.log('Fetching liked songs with token:', token);
-
     try {
-        const response = await SpotifyService.fetchLikedSongs(token, offset, limit);
-        console.log('Fetched liked songs from Spotify API:', response);
+        const offset = parseInt(req.query.offset) || 0;
+        const limit = parseInt(req.query.limit) || 20;
+
+        console.log(`Fetching songs with offset: ${offset}, limit: ${limit}`);
+
+        const response = await SpotifyService.fetchLikedSongs(token, limit, offset);
+
+        console.log(`Returned ${response.items.length} songs`);
+
         res.json(response);
     } catch (error) {
         console.error('Error fetching liked songs:', error.message);
