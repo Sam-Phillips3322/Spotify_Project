@@ -91,16 +91,39 @@ const SpotifyAPI = {
             throw new Error('No authentication token provided');
         }
 
-        console.log('Making API call with token:', token.substring(0, 10) + '...');
-
-        const response = await fetch(`/api/liked-songs?offset=${offset}&limit=${limit}`, {
-            headers: {
-                'Authorization': `Bearer ${token}`,
-            }
+        console.log('Making liked songs request:', {
+            offset,
+            limit,
+            tokenStart: token.substring(0, 10) + '...'
         });
 
-        if (!response.ok) throw new Error('Failed to fetch liked songs');
-        return response.json();
+        try {
+            const response = await fetch(`/api/liked-songs?offset=${offset}&limit=${limit}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                }
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('Fetch error:', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    error: errorText
+                });
+                throw new Error(`Failed to fetch liked songs: ${response.status}`);
+            }
+
+            const data = await response.json();
+            console.log('Successfully fetched songs:', {
+                count: data.items?.length,
+                total: data.total
+            });
+            return data;
+        } catch (error) {
+            console.error('Error in fetchLikedSongs:', error);
+            throw error;
+        }
     },
 
     async removeLikedSong(accessToken, trackId) {
@@ -121,7 +144,9 @@ class SwipeManager {
 
         this.accessToken = AuthState.accessToken;  // Store token reference
         this.processedSongIds = new Set();
-        this.availableSongs = [...initialSongs.items];
+        this.availableSongs = initialSongs.items.filter(song =>
+            !this.processedSongIds.has(song.track.id)
+        );
 
         this.cardStack = cardStackElement;
         this.onEmpty = () => {
@@ -141,8 +166,11 @@ class SwipeManager {
 
         this.loadingScreen = this.cardStack.querySelector('#loading-screen')
 
-        console.log('Initial songs loaded:', this.availableSongs.length);
-        console.log('Total songs available:', this.totalSongs);
+        console.log('SwipeManager initialized:', {
+            availableSongs: this.availableSongs.length,
+            totalSongs: this.totalSongs,
+            currentOffset: this.currentOffset
+        });
 
         this.initializeCards();
         this.setupKeyboardControls();
@@ -173,11 +201,11 @@ class SwipeManager {
     }
 
     updateLoadingProgress() {
-        const processedCount = this.loadingScreen.querySelector('.processed-count');
-        const totalCount = this.loadingScreen.querySelector('.total-count');
+        const processedCount = this.loadingScreen?.querySelector('.processed-count');
+        const totalCount = this.loadingScreen?.querySelector('.total-count');
         if (processedCount && totalCount) {
-            processedCount.textContent = this.processedSongs.size;
-            totalCount.textContent = this.totalSongs;
+            processedCount.textContent = this.processedSongIds.size || '0';
+            totalCount.textContent = this.totalSongs || '0';
         }
     }
 

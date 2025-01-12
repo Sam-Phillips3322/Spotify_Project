@@ -108,16 +108,41 @@ const SpotifyService = {
 
 
     async fetchLikedSongs(accessToken, limit = 20, offset = 0) {
-        console.log(`Fetching liked songs from Spotify...Offset: ${offset}, Limit: ${limit}`);
-        const response = await axios.get(
-            `${SPOTIFY_CONFIG.apiUrl}/me/tracks`,
-            {
-                headers: { Authorization: `Bearer ${accessToken}` },
-                params: { limit, offset, market: 'from_token' }
-            }
-        );
-        console.log('Fetched liked songs:', response.data.items.length);
-        return response.data;
+        console.log('SpotifyService.fetchLikedSongs called with:', {
+            limit,
+            offset,
+            tokenPresent: !!accessToken
+        });
+
+        try {
+            const response = await axios.get(
+                `${SPOTIFY_CONFIG.apiUrl}/me/tracks`,
+                {
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    params: {
+                        limit,
+                        offset,
+                        market: 'from_token'
+                    }
+                }
+            );
+
+            console.log('Spotify API response:', {
+                status: response.status,
+                itemCount: response.data.items?.length
+            });
+
+            return response.data;
+        } catch (error) {
+            console.error('Spotify API error:', {
+                status: error.response?.status,
+                data: error.response?.data
+            });
+            throw error;
+        }
     },
 
     async removeFromLiked(trackId, token) {
@@ -168,30 +193,38 @@ app.get('/callback', async (req, res) => {
 });
 
 app.get('/api/liked-songs', async (req, res) => {
-    console.log('Handling request to fetch liked songs...');
-    const authHeader = req.headers.authorization;
-    console.log("Auth header received:", authHeader);
-    if (!authHeader) {
-        console.warn('No authorization header provided.');
-        return res.status(401).json({ error: 'No authorization header' });
-    }
-
+    console.log('Received liked songs request');
     try {
+        const authHeader = req.headers.authorization;
+        console.log('Auth header:', authHeader ? 'Present' : 'Missing');
+
+        if (!authHeader) {
+            return res.status(401).json({ error: 'No authorization header' });
+        }
+
+        const token = authHeader.split(' ')[1];
         const offset = parseInt(req.query.offset) || 0;
         const limit = parseInt(req.query.limit) || 20;
 
-        console.log(`Fetching songs with offset: ${offset}, limit: ${limit}`);
+        console.log('Fetching songs with params:', { offset, limit });
 
         const response = await SpotifyService.fetchLikedSongs(token, limit, offset);
-
-        console.log(`Returned ${response.items.length} songs`);
-
+        console.log('Successfully fetched songs from Spotify');
         res.json(response);
-    } catch (error) {
-        console.error('Error fetching liked songs:', error.message);
 
-        if (error.response && error.response.status === 401) {
-            return res.status(401).json({ error: 'Invalid or expired token' });
+    } catch (error) {
+        console.error('Error in /api/liked-songs:', {
+            message: error.message,
+            response: error.response?.data,
+            status: error.response?.status
+        });
+
+        // Check if it's a Spotify API error
+        if (error.response?.data) {
+            return res.status(error.response.status).json({
+                error: 'Spotify API error',
+                details: error.response.data
+            });
         }
 
         res.status(500).json({
