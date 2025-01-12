@@ -142,22 +142,29 @@ class SwipeManager {
             throw new Error('No authentication token available');
         }
 
-        this.accessToken = AuthState.accessToken;  // Store token reference
+        this.accessToken = AuthState.accessToken;
         this.processedSongIds = new Set();
-        this.availableSongs = initialSongs.items.filter(song =>
-            !this.processedSongIds.has(song.track.id)
-        );
+        this.pendingProcessIds = new Set();
+        this.availableSongs = [];
+
+        const seenIds = new Set();
+        initialSongs.items.forEach(song => {
+            if (!seenIds.has(song.track.id) &&
+                !this.processedSongIds.has(song.track.id) &&
+                !this.pendingProcessIds.has(song.track.id)) {
+                seenIds.add(song.track.id);
+                this.availableSongs.push(song);
+            }
+        });
 
         this.cardStack = cardStackElement;
         this.onEmpty = () => {
             const template = document.getElementById('no-more-songs-template');
-
             this.cardStack.innerHTML = '';
-
             this.cardStack.appendChild(template.content.cloneNode(true));
-
             if (onEmpty) onEmpty();
         };
+
         this.isLoading = false;
         this.currentOffset = initialSongs.items.length;
         this.totalSongs = initialSongs.total;
@@ -169,7 +176,9 @@ class SwipeManager {
         console.log('SwipeManager initialized:', {
             availableSongs: this.availableSongs.length,
             totalSongs: this.totalSongs,
-            currentOffset: this.currentOffset
+            currentOffset: this.currentOffset,
+            processedIds: this.processedSongIds.size,
+            pendingIds: this.pendingProcessIds.size
         });
 
         this.initializeCards();
@@ -219,8 +228,10 @@ class SwipeManager {
     }
 
     async loadMoreSongs() {
-        if (this.isLoading || !this.accessToken) return;
-        if (this.currentOffset >= this.totalSongs) return;
+        if (this.isLoading || this.currentOffset >= this.totalSongs) {
+            console.log('skipping load - already loading or reached end');
+            return;
+        }
 
         try {
             this.isLoading = true;
@@ -234,15 +245,22 @@ class SwipeManager {
                 this.batchSize
             );
 
-            const newSongs = response.items.filter(song =>
-                !this.processedSongIds.has(song.track.id)
-            );
+            const newSongs = response.items.filter(song => {
+                const songId = song.track.id;
+                return !this.processedSongIds.has(songId) &&
+                    !this.pendingProcessIds.has(songId) &&
+                    !this.availableSongs.some(s => s.track.id === songId);
+            });
 
-            console.log('New unique songs loaded:', newSongs.length);
-
+            console.log('Loaded songs:', {
+                new: newSongs.length,
+                filtered: response.items.length - newSongs.length,
+                processedCount: this.processedSongIds.size,
+                pendingCount: this.pendingProcessIds.size
+            });
 
             this.availableSongs.push(...newSongs);
-            this.currentOffset += response.items.length;
+            this.currentOffset += this.batchSize;
 
             console.log(`Loaded more songs. Total available: ${this.availableSongs.length}`);
         } catch (error) {
@@ -250,13 +268,6 @@ class SwipeManager {
         } finally {
             this.isLoading = false;
             this.hideLoadingScreen();
-        }
-    }
-
-    async checkAndLoadMoreSongs() {
-        if (this.availableSongs.length <= this.minimumSongsThreshold &&
-            this.currentOffset < this.totalSongs) {
-            await this.loadMoreSongs();
         }
     }
 
@@ -377,43 +388,48 @@ class SwipeManager {
     }
 
     async animateAndHandleSwipe(card, direction) {
-        // Set up initial animation
         const swipeOutDistance = direction === 'right' ? window.innerWidth : -window.innerWidth;
-        card.classList.add(`swiping-${direction}`);
-        card.style.transition = 'transform 0.3s ease-out';
-        card.style.transform = `translateX(${swipeOutDistance}px) rotate(${direction === 'right' ? 30 : -30}deg)`;
+        const trackId = card.dataset.trackId;
+
+        if (this.pendingProcessIds.has(trackId)) {
+            console.log('Skipping duplicate swipe for:', trackId);
+            return;
+        }
+
+        this.pendingProcessIds.add(trackId);
 
         try {
-            const trackId = card.dataset.trackId;
+            card.classList.add(`swiping-${direction}`);
+            card.style.transform = `translateX(${swipeOutDistance}px) rotate(${direction === 'right' ? 30 : -30}deg)`;
 
-            // Token validation
             if (!this.accessToken) {
                 throw new Error('No authentication token available');
             }
 
-            // Only process if not already processed
             if (!this.processedSongIds.has(trackId)) {
-                // Add to processed songs set
-                this.processedSongIds.add(trackId);
-
-                // If swiped left, remove from Spotify likes
                 if (direction === 'left') {
                     await SpotifyAPI.removeLikedSong(this.accessToken, trackId);
                 }
-
-                // Remove the song from available songs array
-                this.availableSongs = this.availableSongs.filter(song =>
-                    song.track.id !== trackId
-                );
-
-                console.log('Processed song:', trackId);
-                console.log('Remaining songs:', this.availableSongs.length);
+                this.processedSongIds.add(trackId);
             }
 
-            // Check if we need to load more songs
-            await this.checkAndLoadMoreSongs();
+            this.availableSongs = this.availableSongs.filter(song =>
+                song.track.id !== trackId
+            );
 
-            // Remove card and load next after animation
+            console.log('Song processed:', {
+                trackId,
+                remainingSongs: this.availableSongs.length,
+                processedCount: this.processedSongIds.size,
+                pendingCount: this.pendingProcessIds.size
+            });
+
+            this.pendingProcessIds.delete(trackId);
+
+            if (this.availableSongs.length <= this.minimumSongsThreshold) {
+                this.loadMoreSongs();
+            }
+
             setTimeout(() => {
                 card.remove();
                 this.loadNextCard();
@@ -452,9 +468,11 @@ class SwipeManager {
         const nextSong = this.availableSongs[0];
         if (!nextSong) return;
 
-        if (this.processedSongIds.has(nextSong.track.id)) {
-            this.availableSongs.shift(); // Remove the duplicate
-            this.createAndAddCard(); // Try next song
+        this.availableSongs.shift();
+
+        if (this.processedSongIds.has(nextSong.track.id) ||
+            this.pendingProcessIds.has(nextSong.track.id)) {
+            this.createAndAddCard();
             return;
         }
 
