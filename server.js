@@ -34,6 +34,13 @@ app.use(express.json());
 
 // Error handling middleware
 app.use((err, req, res, next) => {
+    if (err.response?.data?.error?.message?.includes('preview')) {
+        console.error('Preview URL error:', {
+            message: err.message,
+            spotifyError: err.response.data.error
+        });
+    }
+
     console.error('Error:', err);
     res.status(err.status || 500).json({
         error: {
@@ -43,12 +50,6 @@ app.use((err, req, res, next) => {
     });
 });
 
-//Logging middleware
-app.use((req, res, next) => {
-    console.log(`${req.method} ${req.url}`);
-    next();
-});
-
 // Spotify API service
 const SpotifyService = {
     getAuthUrl() {
@@ -56,7 +57,7 @@ const SpotifyService = {
             client_id: SPOTIFY_CONFIG.clientId,
             response_type: 'code',
             redirect_uri: SPOTIFY_CONFIG.redirectUri,
-            scope: 'user-library-read user-library-modify',
+            scope: 'user-library-read user-library-modify streaming',
             show_dialog: true
         })}`;
         console.log('Generated Spotify auth Url:', authUrl);
@@ -125,14 +126,23 @@ const SpotifyService = {
                     params: {
                         limit,
                         offset,
-                        market: 'from_token'
+                        market: 'from_token',
+                        additional_types: 'track'
                     }
                 }
             );
 
-            console.log('Spotify API response:', {
+            const previewStats = response.data.items.reduce((stats, item) => {
+                stats.total++;
+                if (item.track.preview_url) stats.withPreview++;
+                return stats;
+            }, { total: 0, withPreview: 0 });
+
+            console.log('Preview URL stats:', {
                 status: response.status,
-                itemCount: response.data.items?.length
+                totalTracks: previewStats.total,
+                tracksWithPreview: previewStats.withPreview,
+                previewPercentage: `${((previewStats.withPreview / previewStats.total) * 100).toFixed(1)}%`
             });
 
             return response.data;

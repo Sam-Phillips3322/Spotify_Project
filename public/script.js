@@ -181,6 +181,9 @@ class SwipeManager {
             pendingIds: this.pendingProcessIds.size
         });
 
+        this.currentAudio = null;
+        this.audioFadeOutDuration = 300;
+
         this.initializeCards();
         this.setupKeyboardControls();
     }
@@ -297,6 +300,7 @@ class SwipeManager {
         const card = template.content.cloneNode(true).querySelector('.song-card');
 
         card.dataset.trackId = song.track.id;
+        card.dataset.previewUrl = song.track.preview_url;
         card.setAttribute('aria-label', `${song.track.name} by ${song.track.artists.map(artist => artist.name).join(', ')}. Use arrow keys to navigate.`);
 
         const image = card.querySelector('.song-image');
@@ -307,7 +311,87 @@ class SwipeManager {
         card.querySelector('.song-artist').textContent = song.track.artists.map(artist => artist.name).join(', ');
         card.querySelector('.song-album').textContent = song.track.album.name;
 
+        if (!song.track.preview_url) {
+            const previewIndicator = document.createElement('div');
+            previewIndicator.className = 'preview-unavailable';
+            previewIndicator.textContent = 'Preview unavailable';
+            card.appendChild(previewIndicator);
+        }
+
         return card;
+    }
+
+    async playPreview(card) {
+        const previewUrl = card.dataset.previewUrl;
+
+        // Stop any currently playing audio
+        await this.stopCurrentAudio();
+
+        if (!previewUrl) {
+            console.log('No preview available for this track');
+            return;
+        }
+
+        try {
+            const audio = new Audio(previewUrl);
+            this.currentAudio = audio;
+
+            // Set initial volume
+            audio.volume = 0;
+
+            // Start playing and fade in
+            await audio.play();
+            this.fadeInAudio(audio);
+
+            // Add error handling
+            audio.addEventListener('error', (e) => {
+                console.error('Audio playback error:', e);
+                this.currentAudio = null;
+            });
+
+        } catch (error) {
+            console.error('Failed to play preview:', error);
+            this.currentAudio = null;
+        }
+    }
+
+    fadeInAudio(audio, duration = 1000) {
+        const fade = setInterval(() => {
+            if (audio.volume < 0.8) {
+                audio.volume = Math.min(audio.volume + 0.1, 0.8);
+            } else {
+                clearInterval(fade);
+            }
+        }, duration / 10);
+    }
+
+    async fadeOutAndStop(audio) {
+        if (!audio) return;
+
+        return new Promise((resolve) => {
+            const startVolume = audio.volume;
+            const steps = 10;
+            const stepDuration = this.audioFadeOutDuration / steps;
+            const volumeStep = startVolume / steps;
+
+            const fade = setInterval(() => {
+                if (audio.volume > volumeStep) {
+                    audio.volume = Math.max(0, audio.volume - volumeStep);
+                } else {
+                    clearInterval(fade);
+                    audio.pause();
+                    audio.currentTime = 0;
+                    resolve();
+                }
+            }, stepDuration);
+        });
+    }
+
+    async stopCurrentAudio() {
+        if (this.currentAudio) {
+            await this.fadeOutAndStop(this.currentAudio);
+            this.currentAudio = null;
+        }
     }
 
     initializeSwipe(element) {
@@ -399,6 +483,8 @@ class SwipeManager {
         this.pendingProcessIds.add(trackId);
 
         try {
+            await this.stopCurrentAudio();
+
             card.classList.add(`swiping-${direction}`);
             card.style.transform = `translateX(${swipeOutDistance}px) rotate(${direction === 'right' ? 30 : -30}deg)`;
 
@@ -424,7 +510,6 @@ class SwipeManager {
                 pendingCount: this.pendingProcessIds.size
             });
 
-            this.pendingProcessIds.delete(trackId);
 
             if (this.availableSongs.length <= this.minimumSongsThreshold) {
                 this.loadMoreSongs();
@@ -437,9 +522,12 @@ class SwipeManager {
 
         } catch (error) {
             console.error('Swipe action failed:', error);
-            // Reset card position if action fails
+            this.pendingProcessIds.delete(trackId);
             card.style.transform = '';
             card.classList.remove(`swiping-${direction}`);
+
+            this.playPreview(card);
+
             alert('Action failed. Please try again.');
         }
     }
@@ -480,6 +568,8 @@ class SwipeManager {
         newCard.style.zIndex = 1;
         this.cardStack.appendChild(newCard);
         this.initializeSwipe(newCard);
+
+        this.playPreview(newCard);
 
         Array.from(this.cardStack.children).forEach((card, index, array) => {
             card.style.zIndex = array.length - index;
